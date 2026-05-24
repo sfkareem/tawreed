@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tawreed - Construction Materials Extractor</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app-container">
+        <!-- Sidebar Navigation -->
+        <aside>
+            <div class="logo-section">
+                <div class="logo-icon">
+                    <!-- Package Icon -->
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <h1>Tawreed</h1>
+                    <span>Procurement Assistant</span>
+                </div>
+            </div>
+
+            <nav>
+                <div class="nav-item active" data-view="workspace">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="7" height="9"></rect>
+                        <rect x="14" y="3" width="7" height="5"></rect>
+                        <rect x="14" y="12" width="7" height="9"></rect>
+                        <rect x="3" y="16" width="7" height="5"></rect>
+                    </svg>
+                    <span>Workspace</span>
+                </div>
+                <div class="nav-item" data-view="history">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                    </svg>
+                    <span>Diagnostics</span>
+                </div>
+                <div class="nav-item" data-view="settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                    <span>AI Settings</span>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div>Tawreed v1.0.0</div>
+                <div>Local-First Storage</div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main>
+            <!-- 1. Workspace View -->
+            <div id="workspace-view" class="view-panel active">
+                <header>
+                    <div>
+                        <h2>Procurement Workspace</h2>
+                        <p>Upload a BOQ, cost breakdown, or image to extract a structured materials list.</p>
+                    </div>
+                </header>
+
+                <div class="workspace-grid">
+                    <!-- Left: Upload & Progress -->
+                    <div class="glass-card" style="display: flex; flex-direction: column; gap: 24px;">
+                        <!-- Dropzone Area -->
+                        <div id="dropzone" class="dropzone-container">
+                            <div class="drop-icon-wrapper">
+                                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                            </div>
+                            <div class="drop-text-wrapper">
+                                <h3>Click to select project file</h3>
+                                <p>Drag and drop Excel, CSV, PDF, Word, or screenshots here</p>
+                            </div>
+                            <div class="file-types-badge">XLSX, CSV, PDF, DOCX, PNG, JPG</div>
+                        </div>
+
+                        <!-- File Selected State (Hidden initially) -->
+                        <div id="file-selected-box" class="file-selected-box" style="display: none;">
+                            <div class="file-info-left">
+                                <div class="file-icon">
+                                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                                        <polyline points="10 9 9 9 8 9"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="file-details">
+                                    <h4 id="selected-file-name">filename.xlsx</h4>
+                                    <span id="selected-file-path">C:\Path\To\File</span>
+                                </div>
+                            </div>
+                            <button id="remove-file-btn" class="remove-file-btn">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Progress Display (Hidden initially) -->
+                        <div id="progress-container" class="progress-container">
+                            <div class="progress-header">
+                                <h4 id="progress-status-text">Processing job...</h4>
+                                <span id="progress-percentage">0%</span>
+                            </div>
+                            <div class="progress-bar-bg">
+                                <div id="progress-bar-fill" class="progress-bar-fill"></div>
+                            </div>
+                            <div class="progress-steps">
+                                <div class="step-item" id="step-parse">
+                                    <div class="step-icon-pending"></div>
+                                    <svg class="step-icon-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none; color: var(--success);"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span>Reading and serializing file data</span>
+                                </div>
+                                <div class="step-item" id="step-ai">
+                                    <div class="step-icon-pending"></div>
+                                    <svg class="step-icon-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none; color: var(--success);"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span>Querying AI provider & extracting materials</span>
+                                </div>
+                                <div class="step-item" id="step-repair">
+                                    <div class="step-icon-pending"></div>
+                                    <svg class="step-icon-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none; color: var(--success);"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span>Validating response structure & auto-repairing</span>
+                                </div>
+                                <div class="step-item" id="step-excel">
+                                    <div class="step-icon-pending"></div>
+                                    <svg class="step-icon-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none; color: var(--success);"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span>Formatting sheets with Tawreed Signature Theme</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Success Card (Hidden initially) -->
+                        <div id="success-card" class="success-card glass-card">
+                            <div class="success-icon-wrapper">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                </svg>
+                            </div>
+                            <h3>Materials Extracted Successfully!</h3>
+                            <p>Tawreed has converted your document and saved the structured workbook locally.</p>
+                            
+                            <div class="results-summary-row">
+                                <div class="results-badge">
+                                    <span id="badge-materials" class="num">0</span>
+                                    <span class="label">Materials</span>
+                                </div>
+                                <div class="results-badge">
+                                    <span id="badge-packages" class="num">0</span>
+                                    <span class="label">Packages</span>
+                                </div>
+                                <div class="results-badge">
+                                    <span id="badge-flags" class="num" style="color: var(--warning);">0</span>
+                                    <span class="label">Review Flags</span>
+                                </div>
+                                <div class="results-badge">
+                                    <span id="badge-warnings" class="num" style="color: var(--danger);">0</span>
+                                    <span class="label">Warnings</span>
+                                </div>
+                            </div>
+
+                            <div class="results-actions">
+                                <button id="open-excel-btn" class="btn btn-primary">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                    Open Excel File
+                                </button>
+                                <button id="open-csv-btn" class="btn">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                    Open CSV (ERP)
+                                </button>
+                                <button id="open-folder-btn" class="btn">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                                    Open Folder
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Quick Settings & Launch -->
+                    <div class="glass-card options-panel">
+                        <h3>Job Parameters</h3>
+                        
+                        <div class="form-group">
+                            <label for="preferred-language">Output Language</label>
+                            <div class="select-wrapper">
+                                <select id="preferred-language">
+                                    <option value="bilingual">Bilingual (EN/AR) / ثنائي اللغة</option>
+                                    <option value="arabic">Arabic Only / العربية فقط</option>
+                                    <option value="english">English Only / الإنجليزية فقط</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="output-directory-input">Output Directory</label>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="text" id="output-directory-input" placeholder="~/.tawreed (Default)" readonly>
+                                <button id="select-output-folder-btn" class="btn" style="padding: 10px;">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Check connection details warning -->
+                        <div id="api-status-warning" class="privacy-banner" style="margin-bottom: 20px;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                            <div>
+                                To run extraction, ensure your AI Key is configured. You can edit credentials in the <strong>AI Settings</strong> tab.
+                            </div>
+                        </div>
+
+                        <button id="generate-btn" class="btn btn-primary btn-block" disabled>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            Start Extraction Job
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Diagnostics & History View -->
+            <div id="history-view" class="view-panel">
+                <header>
+                    <div>
+                        <h2>Diagnostics & Job History</h2>
+                        <p>Review raw requests, API payloads, repairs, and diagnostics logs.</p>
+                    </div>
+                </header>
+
+                <div class="history-layout">
+                    <div class="glass-card">
+                        <h3>Past Jobs</h3>
+                        <div id="jobs-list" class="jobs-list" style="margin-top: 16px;">
+                            <!-- Dynamically loaded -->
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                <h4>No past jobs found</h4>
+                                <p>Execute an extraction job first to generate diagnostic logs.</p>
+                            </div>
+                        </div>
+
+                        <!-- Diagnostics Tab Content -->
+                        <div id="diagnostics-panel" class="diagnostics-panel" style="display: none;">
+                            <div class="diagnostics-header">
+                                <h3 id="diagnostics-title">Job Diagnostics: Job ID</h3>
+                                <button id="open-diagnostics-folder-btn" class="btn" style="font-size: 12px; padding: 6px 12px;">
+                                    Open Log Folder
+                                </button>
+                            </div>
+
+                            <div class="diagnostics-tabs">
+                                <button class="tab-btn active" data-tab="serialized_input">Serialized File</button>
+                                <button class="tab-btn" data-tab="system_prompt">System Prompt</button>
+                                <button class="tab-btn" data-tab="raw_ai_response">Raw AI Response</button>
+                                <button class="tab-btn" data-tab="extracted_data">Clean JSON</button>
+                                <button class="tab-btn" data-tab="repair_attempt">Repair Logs</button>
+                                <button class="tab-btn" data-tab="error">Errors</button>
+                            </div>
+
+                            <div class="diagnostics-content">
+                                <pre id="diagnostics-text">Select a tab to view details...</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. AI Settings View -->
+            <div id="settings-view" class="view-panel">
+                <header>
+                    <div>
+                        <h2>AI Connection Settings</h2>
+                        <p>Configure and test your local or cloud LLM provider connection.</p>
+                    </div>
+                </header>
+
+                <div class="glass-card">
+                    <div class="settings-grid">
+                        <!-- Left Panel settings -->
+                        <div style="display: flex; flex-direction: column; gap: 20px;">
+                            <div class="form-group">
+                                <label for="api-provider">API Provider</label>
+                                <div class="select-wrapper">
+                                    <select id="api-provider">
+                                        <option value="gemini">Google Gemini (Recommended)</option>
+                                        <option value="openai">OpenAI (ChatGPT)</option>
+                                        <option value="anthropic">Anthropic Claude</option>
+                                        <option value="custom">Custom (Ollama / Local endpoint)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="base-url">Base URL</label>
+                                <input type="text" id="base-url" placeholder="https://generativelanguage.googleapis.com">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="api-key">API Key</label>
+                                <div class="password-toggle-container">
+                                    <input type="password" id="api-key" placeholder="Enter API Key">
+                                    <button type="button" id="toggle-key-visibility" class="password-toggle-btn">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Panel settings -->
+                        <div style="display: flex; flex-direction: column; gap: 20px;">
+                            <div class="form-group">
+                                <label for="model-name">Model Name</label>
+                                <input type="text" id="model-name" placeholder="gemini-1.5-flash">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="max-file-size">Max File Size (MB)</label>
+                                <input type="text" id="max-file-size" placeholder="15">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="max-chars">Max Content Length (Characters)</label>
+                                <input type="text" id="max-chars" placeholder="80000">
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="settings-actions">
+                            <button id="test-connection-btn" class="btn">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                Test Connection
+                            </button>
+                            <button id="save-settings-btn" class="btn btn-primary">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                                Save Settings
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Privacy Info -->
+                <div class="privacy-banner" style="margin-top: 24px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    <div>
+                        <strong>Privacy Notice:</strong> Tawreed is a local-first application. Settings and job diagnostic files are saved strictly on your hard drive at <code>C:\Users\karee\.tawreed</code>. Excel parsing is executed locally. However, extracting materials requires sending the serialized text content of your document to your configured AI provider. Please make sure you are aware of the privacy and data terms of your selected provider (e.g. Gemini, OpenAI, or Claude).
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification Overlay -->
+    <div id="toast" class="toast">
+        <svg id="toast-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+        <span id="toast-message">Message here...</span>
+    </div>
+
+    <!-- JS Scripts -->
+    <script src="app.js"></script>
+</body>
+</html>

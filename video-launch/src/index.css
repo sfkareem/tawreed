@@ -1,0 +1,82 @@
+:root {
+  --bg-base: #0f0f15;
+  --bg-surface: rgba(26, 26, 38, 0.75);
+  --brand-primary: #d35400;
+  --brand-hover: #e67e22;
+  --brand-accent: #f39c12;
+  --brand-glow: rgba(211, 84, 0, 0.25);
+  --text-primary: #f5f6fa;
+  --text-secondary: #a0a5c1;
+  --text-muted: #676b85;
+  --success: #2ecc71;
+  --danger: #e74c3c;
+  --warning: #f1c40f;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.scene {
+  position: absolute;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background-color: var(--bg-base);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.scene-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Shared decoratives styles */
+.deco-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.deco-ghost {
+  position: absolute;
+  font-family: 'Cairo', sans-serif;
+  font-weight: 900;
+  font-size: 280px;
+  color: rgba(255, 255, 255, 0.02);
+  pointer-events: none;
+  user-select: none;
+  z-index: 1;
+}
+
+.deco-line {
+  position: absolute;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--brand-primary), transparent);
+  z-index: 2;
+}
+
+.scene-label {
+  position: absolute;
+  top: 60px;
+  left: 80px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  z-index: 10;
+}

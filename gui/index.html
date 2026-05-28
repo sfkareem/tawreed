@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tawreed - Materials Takeoff</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="logo-area">
+        <img src="logo.png" class="logo-img" alt="Tawreed Logo">
+      </div>
+      <nav class="nav-links">
+        <button class="nav-btn active" onclick="switchTab('workspace')" id="nav-workspace-btn">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          Material Scheduling
+        </button>
+        <button class="nav-btn" onclick="switchTab('history')" id="nav-history-btn">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          History
+        </button>
+        <button class="nav-btn" onclick="switchTab('settings')" id="nav-settings-btn">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          Settings
+        </button>
+        <button class="nav-btn" onclick="switchTab('about')" id="nav-about-btn">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          About
+        </button>
+
+      </nav>
+      <div class="sidebar-footer">
+        <span class="version-label">v0.0.1</span>
+      </div>
+    </aside>
+
+    <!-- Main Dynamic Content Panel -->
+    <main class="content-viewport">
+      <!-- Workspace Tab -->
+      <section id="workspace-tab" class="tab-view active">
+        <div class="header-card" style="text-align: center; max-width: 600px; margin: 0 auto 40px auto;">
+          <h1 style="font-size: 32px;">Procurement Packaging</h1>
+          <p class="subtitle" style="font-size: 16px;">Extract structured material schedules from design documents into ready-to-order procurement packages.</p>
+        </div>
+
+        <div class="wizard-container glass-card" style="max-width: 800px; margin: 0 auto; padding: 40px;">
+          <!-- Step 1: Ingest -->
+          <div id="wizard-step-1" class="wizard-step active">
+            <div class="upload-area" id="drop-zone" onclick="triggerFilePicker()" style="padding: 60px 20px;">
+              <div class="upload-icon-wrapper" style="width: 80px; height: 80px; margin-bottom: 24px;">
+                <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 40px; height: 40px;">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+              </div>
+              <p class="upload-main-text" style="font-size: 20px;">Drag & drop document here, or click to browse</p>
+              <p class="upload-sub-text">Excel, Word, PDF, CSV, and Images supported</p>
+            </div>
+            
+            <div class="file-info-badge" id="file-info-badge" style="display:none; justify-content: center; margin-top: 24px; font-size: 16px; padding: 12px 24px;">
+              <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+              <span id="selected-file-label">No file selected</span>
+            </div>
+
+            <div class="form-row" style="margin-top: 40px; justify-content: center; max-width: 500px; margin-left: auto; margin-right: auto;">
+              <div class="form-item" style="flex: 1;">
+                <div class="select-wrapper">
+                  <select id="lang-select">
+                    <option value="bilingual">Bilingual (English/Arabic)</option>
+                    <option value="english">English Only</option>
+                    <option value="arabic">Arabic Only</option>
+                  </select>
+                </div>
+              </div>
+              <button class="primary-btn pulse-anim" onclick="startExtraction()" id="extract-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Extract Packages
+              </button>
+            </div>
+          </div>
+
+          <!-- Step 2: Processing -->
+          <div id="wizard-step-2" class="wizard-step" style="display: none; flex-direction: column; align-items: center; padding: 60px 0;">
+            <div class="spinner" style="width: 60px; height: 60px; border-width: 4px; margin-bottom: 24px;"></div>
+            <h2 style="font-size: 24px; margin-bottom: 12px;">Agentic Extraction in Progress</h2>
+            <p id="progress-status" style="color: var(--text-muted); font-size: 16px;">Analyzing document structures...</p>
+          </div>
+
+          <!-- Step 3: Success -->
+          <div id="wizard-step-3" class="wizard-step" style="display: none; flex-direction: column; align-items: center; padding: 60px 0;">
+            <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--success-glow); display: flex; align-items: center; justify-content: center; margin-bottom: 24px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--success-color)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width: 40px; height: 40px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+            <h2 style="font-size: 24px; margin-bottom: 12px;">Extraction Complete!</h2>
+            <p style="color: var(--text-muted); font-size: 16px; margin-bottom: 40px; text-align: center; max-width: 400px;">
+              The materials schedule has been successfully extracted into a clean procurement package format.
+            </p>
+            <div style="display: flex; gap: 16px;">
+              <button class="primary-btn" onclick="openExcelFile()" style="background: var(--success-color); border-color: var(--success-color); box-shadow: 0 0 20px var(--success-glow);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Open Excel File
+              </button>
+              <button class="nav-btn" onclick="resetWizard()" style="border: 1px solid var(--border-glass);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                New Job
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- History Tab -->
+      <section id="history-tab" class="tab-view">
+        <div class="header-card">
+          <h1>Extraction History</h1>
+          <p class="subtitle">Review past material schedule extraction jobs and previously processed Bill of Quantities (BoQ).</p>
+        </div>
+        
+        <div class="history-container glass-card">
+          <table class="takeoff-table" id="history-grid">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Source File</th>
+                <th>Items Extracted</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="history-rows">
+              <tr class="empty-state-row">
+                <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 40px;">No history records found.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Settings Tab -->
+      <section id="settings-tab" class="tab-view">
+        <div class="header-card">
+          <h1>System Settings</h1>
+          <p class="subtitle">Configure AI model providers, credentials, API endpoints, and customize display settings.</p>
+        </div>
+
+        <div class="settings-container glass-card">
+          <div class="form-section">
+            <h3>AI Configuration</h3>
+            <div class="form-group">
+              <label for="provider-select">Model Provider</label>
+              <div class="select-wrapper">
+                <select id="provider-select" onchange="adjustProviderDefaults()">
+                  <option value="gemini">Google Gemini</option>
+                  <option value="openai">OpenAI Compatible</option>
+                </select>
+              </div>
+              <p class="field-hint">Select the active LLM service for material takeoff routine.</p>
+            </div>
+
+            <div class="form-group">
+              <label for="api-key-input">API Key</label>
+              <div class="input-wrapper">
+                <input type="password" id="api-key-input" placeholder="Paste your API key here...">
+              </div>
+              <p class="field-hint">Your API keys are stored locally-first and encrypted via system sandbox rules.</p>
+            </div>
+
+            <div class="form-group">
+              <label for="model-input">Model Name</label>
+              <div class="input-wrapper">
+                <input type="text" id="model-input">
+              </div>
+              <p class="field-hint">Provider model version identifier (e.g. <code>gemini-2.0-flash</code> or <code>gpt-4o-mini</code>).</p>
+            </div>
+
+            <div class="form-group">
+              <label for="base-url-input">Base URL (Optional)</label>
+              <div class="input-wrapper">
+                <input type="text" id="base-url-input" placeholder="Default provider URL">
+              </div>
+              <p class="field-hint">Proxy or local reverse gateway endpoint, if you route requests through a custom hub.</p>
+            </div>
+
+            <div class="action-bar">
+              <button class="primary-btn save-btn" onclick="saveSettings()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                Save Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- About Tab -->
+      <section id="about-tab" class="tab-view">
+        <div class="header-card">
+          <h1>About Tawreed</h1>
+          <p class="subtitle">Intelligent Construction Procurement Assistant.</p>
+        </div>
+        <div class="about-grid">
+          <div class="about-details glass-card">
+            <h3>Material Scheduling & Procurement</h3>
+            <p>Tawreed streamlines procurement by organizing scattered material data from design documents and Bill of Quantities (BoQ) into ready-to-order procurement packages.</p>
+            <p>It automates the laborious process of filtering and grouping materials so engineers can focus on technical validation and supplier relations.</p>
+            <div class="meta-list">
+              <div class="meta-item">
+                <span class="meta-label">Developer</span>
+                <span class="meta-value">kareemsafwat.com</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>

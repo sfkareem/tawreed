@@ -1,0 +1,15 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+build/
+dist/
+.gemini/
+.idea/
+.vscode/
+node_modules/
+.agents/
+skills-lock.json
+bin/
+src-tauri/target/
+src-tauri/gen/

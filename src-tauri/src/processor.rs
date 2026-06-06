@@ -31,6 +31,7 @@ pub async fn slice_boq(
     for sheet_name in &sheet_names {
         if let Ok(range) = excel.worksheet_range(sheet_name) {
             markdown_content.push_str(&format!("## Sheet: {}\n", sheet_name));
+            let mut header_found = false;
             
             for (i, row) in range.rows().enumerate() {
                 let row_strs: Vec<String> = row.iter().map(|c| match c {
@@ -41,17 +42,27 @@ pub async fn slice_boq(
                     _ => "".to_string(),
                 }).collect();
 
-                // Skip completely empty rows
-                if row_strs.iter().all(|s| s.trim().is_empty()) {
-                    continue;
-                }
+                if row_strs.iter().all(|s| s.trim().is_empty()) { continue; }
 
-                if i == 0 {
-                    headers_map.insert(sheet_name.clone(), row_strs.clone());
-                    markdown_content.push_str(&format!("| ID | {} |\n", row_strs.join(" | ")));
-                    let mut sep = vec!["---"];
-                    sep.extend(vec!["---"; row_strs.len()]);
-                    markdown_content.push_str(&format!("| {} |\n", sep.join(" | ")));
+                if !header_found {
+                    let row_joined = row_strs.join(" ").to_lowercase();
+                    let non_empty_count = row_strs.iter().filter(|s| !s.trim().is_empty()).count();
+                    let has_keyword = row_joined.contains("كمية") || row_joined.contains("كميه") || row_joined.contains("qty") || 
+                                      row_joined.contains("سعر") || row_joined.contains("rate") ||
+                                      row_joined.contains("وحدة") || row_joined.contains("وحده") || row_joined.contains("unit") ||
+                                      row_joined.contains("اجمالي") || row_joined.contains("total");
+
+                    if non_empty_count >= 3 && has_keyword {
+                        header_found = true;
+                        headers_map.insert(sheet_name.clone(), row_strs.clone());
+                        markdown_content.push_str(&format!("| ID | {} |\n", row_strs.join(" | ")));
+                        let mut sep = vec!["---"];
+                        sep.extend(vec!["---"; row_strs.len()]);
+                        markdown_content.push_str(&format!("| {} |\n", sep.join(" | ")));
+                    } else {
+                        // Include metadata in markdown for LLM to extract project name / date
+                        markdown_content.push_str(&format!("{}\n", row_strs.into_iter().filter(|s| !s.trim().is_empty()).collect::<Vec<_>>().join(": ")));
+                    }
                     continue;
                 }
 
@@ -278,11 +289,18 @@ pub async fn slice_boq(
             for (col, val) in source_headers.iter().enumerate() {
                 let c = col as u16;
                 let lower = val.to_lowercase();
-                if lower.contains("بند") || lower.contains("رقم") || lower.contains("no") || lower.contains("item") { if num_col.is_none() { num_col = Some(c); } }
-                if lower.contains("بيان") || lower.contains("وصف") || lower.contains("desc") { desc_col = Some(c); }
-                if lower.contains("وحدة") || lower.contains("unit") { unit_col = Some(c); }
-                if lower.contains("كمية") || lower.contains("qty") || lower.contains("quantity") { qty_col = Some(c); }
-                if lower.contains("سعر") || lower.contains("فئة") || lower.contains("rate") || lower.contains("price") { rate_col = Some(c); }
+                
+                let is_num = lower.contains("رقم") || lower.contains("no") || lower.contains("item") || lower.contains("مسلسل");
+                let is_desc = lower.contains("بيان") || lower.contains("وصف") || lower.contains("desc") || (lower.contains("بند") && !lower.contains("رقم"));
+                let is_unit = lower.contains("وحدة") || lower.contains("وحده") || lower.contains("unit");
+                let is_qty = lower.contains("كمية") || lower.contains("كميه") || lower.contains("qty") || lower.contains("quantity");
+                let is_rate = lower.contains("سعر") || lower.contains("فئة") || lower.contains("فئه") || lower.contains("rate") || lower.contains("price");
+
+                if is_num { if num_col.is_none() { num_col = Some(c); } }
+                else if is_desc { if desc_col.is_none() { desc_col = Some(c); } }
+                else if is_unit { if unit_col.is_none() { unit_col = Some(c); } }
+                else if is_qty { if qty_col.is_none() { qty_col = Some(c); } }
+                else if is_rate { if rate_col.is_none() { rate_col = Some(c); } }
             }
         }
         

@@ -213,6 +213,36 @@ pub async fn slice_boq(
         .set_align(FormatAlign::Top)
         .set_num_format("#,##0.00;(#,##0.00);-");
 
+    let unfilled_format = Format::new()
+        .set_font_name("Calibri")
+        .set_border(FormatBorder::Thin)
+        .set_background_color(Color::RGB(0xFFFF00)) // Bright Yellow
+        .set_align(FormatAlign::Top)
+        .set_text_wrap();
+
+    // 4.5. Generate Cover Sheet
+    let mut cover_sheet = workbook.add_worksheet().set_name("Cover").map_err(|e| e.to_string())?;
+    cover_sheet.set_right_to_left(true);
+    let _ = cover_sheet.set_column_width(0, 30);
+    let _ = cover_sheet.set_column_width(1, 50);
+
+    cover_sheet.write_with_format(1, 0, "Application", &header_format).map_err(|e| e.to_string())?;
+    cover_sheet.write_with_format(1, 1, "Slab BOQ Slicer - Developed by kareemsafwat.com", &string_format).map_err(|e| e.to_string())?;
+    
+    cover_sheet.write_with_format(3, 0, "Project Name", &header_format).map_err(|e| e.to_string())?;
+    if let Some(ref name) = project_name {
+        cover_sheet.write_with_format(3, 1, name, &string_format).map_err(|e| e.to_string())?;
+    } else {
+        cover_sheet.write_with_format(3, 1, "", &unfilled_format).map_err(|e| e.to_string())?;
+    }
+
+    cover_sheet.write_with_format(4, 0, "Date", &header_format).map_err(|e| e.to_string())?;
+    if let Some(ref date) = project_date {
+        cover_sheet.write_with_format(4, 1, date, &string_format).map_err(|e| e.to_string())?;
+    } else {
+        cover_sheet.write_with_format(4, 1, "", &unfilled_format).map_err(|e| e.to_string())?;
+    }
+
     let mut category_totals_info: Vec<(String, String)> = Vec::new(); // (CategoryName, AbsoluteCellReference)
 
     for (category, rows) in &categorized_data {

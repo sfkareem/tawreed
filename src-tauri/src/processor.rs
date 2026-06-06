@@ -190,6 +190,7 @@ pub async fn extract_work_packages(
                     }
                 },
                 Data::Bool(b) => { $s.write_boolean_with_format($r, $c, *b, $align).map_err(|e| e.to_string())?; },
+                Data::Empty => { $s.write_string_with_format($r, $c, "", $align).map_err(|e| e.to_string())?; },
                 _ => { $s.write_string_with_format($r, $c, "-", $align).map_err(|e| e.to_string())?; },
             }
         }
@@ -248,7 +249,7 @@ pub async fn extract_work_packages(
 
     // 4.5. Generate Cover Sheet
     let mut cover_sheet = workbook.add_worksheet().set_name("Cover").map_err(|e| e.to_string())?;
-    cover_sheet.set_right_to_left(true);
+
     let _ = cover_sheet.set_column_width(0, 30);
     let _ = cover_sheet.set_column_width(1, 50);
 
@@ -277,7 +278,6 @@ pub async fn extract_work_packages(
 
         let sheet = workbook.add_worksheet().set_name(&format!("Pkg - {}", safe_name).chars().take(31).collect::<String>()).map_err(|e| e.to_string())?;
         
-        sheet.set_right_to_left(true);
         sheet.set_print_fit_to_pages(1, 0);
         sheet.set_repeat_rows(0, 0).map_err(|e| e.to_string())?;
 
@@ -342,7 +342,7 @@ pub async fn extract_work_packages(
             write_data!(sheet, current_row, 4, &rate_val, &num_format, &num_format);
             let pkg_rate_cell = rust_xlsxwriter::utility::row_col_to_cell(current_row, 4);
 
-            sheet.write_formula_with_format(current_row, 5, format!("={}*{}", pkg_qty_cell, pkg_rate_cell).as_str(), &num_format).map_err(|e| e.to_string())?;
+            sheet.write_formula_with_format(current_row, 5, format!("=IFERROR({}*{}, 0)", pkg_qty_cell, pkg_rate_cell).as_str(), &num_format).map_err(|e| e.to_string())?;
 
             master_rows_data.push((safe_name.clone(), num_val, desc_val, unit_val, qty_val, rate_val));
 
@@ -357,7 +357,6 @@ pub async fn extract_work_packages(
 
     // 5. Master Sheet Setup
     let mut master_sheet = workbook.add_worksheet().set_name("Master").map_err(|e| e.to_string())?;
-    master_sheet.set_right_to_left(true);
     master_sheet.set_print_fit_to_pages(1, 0);
     master_sheet.set_repeat_rows(0, 0).map_err(|e| e.to_string())?;
 
@@ -385,7 +384,7 @@ pub async fn extract_work_packages(
 
         let mst_qty_cell = rust_xlsxwriter::utility::row_col_to_cell(master_row, 4);
         let mst_rate_cell = rust_xlsxwriter::utility::row_col_to_cell(master_row, 5);
-        master_sheet.write_formula_with_format(master_row, 6, format!("={}*{}", mst_qty_cell, mst_rate_cell).as_str(), &num_format).map_err(|e| e.to_string())?;
+        master_sheet.write_formula_with_format(master_row, 6, format!("=IFERROR({}*{}, 0)", mst_qty_cell, mst_rate_cell).as_str(), &num_format).map_err(|e| e.to_string())?;
 
         master_row += 1;
     }

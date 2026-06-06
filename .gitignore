@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Project build outputs and test binaries
+.next
+.venv
+src-tauri/src/bin/test_boq.rs
+src-tauri/target/
+.env

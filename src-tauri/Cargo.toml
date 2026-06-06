@@ -29,4 +29,5 @@ tokio = "1.52.3"
 tauri-plugin-dialog = "2"
 rusqlite = { version = "0.40.1", features = ["bundled"] }
 directories = "6.0.0"
+chrono = "0.4.45"
 

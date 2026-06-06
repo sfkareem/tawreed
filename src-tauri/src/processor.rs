@@ -4,14 +4,14 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use tauri::{AppHandle, Emitter};
 
-pub async fn slice_boq(
+pub async fn extract_work_packages(
     app: AppHandle,
     file_path: &str,
     base_url: &str,
     model: &str,
     api_key: &str,
-) -> Result<String, String> {
-    let _ = app.emit("boq-progress", "Initializing Slab Agent core engine...");
+) -> Result<(String, i64), String> {
+    let _ = app.emit("boq-progress", "Initializing Tawreed Extractor core engine...");
 
     let mut excel: Xlsx<_> = open_workbook(file_path).map_err(|e| format!("Could not open file: {}", e))?;
     let sheet_names = excel.sheet_names().to_owned();
@@ -19,7 +19,7 @@ pub async fn slice_boq(
         return Err("Excel file is empty".into());
     }
 
-    let _ = app.emit("boq-progress", format!("Slab Agent mapping structural relationships across {} sheets...", sheet_names.len()));
+    let _ = app.emit("boq-progress", format!("Tawreed Extractor mapping structural relationships across {} sheets...", sheet_names.len()));
 
     let mut all_data: Vec<(String, String, Vec<Data>)> = Vec::new(); // (row_id, sheet_name, original_row_data)
     let mut headers_map: HashMap<String, Vec<String>> = HashMap::new();
@@ -76,7 +76,7 @@ pub async fn slice_boq(
         }
     }
 
-    let _ = app.emit("boq-progress", format!("Slab Agent compressed {} unique items into token-efficient payload...", global_row_id - 1));
+    let _ = app.emit("boq-progress", format!("Tawreed Extractor compressed {} unique items into token-efficient payload...", global_row_id - 1));
     let _ = app.emit("boq-progress", "Dispatching payload to remote LLM for structural categorization...");
 
     // 2. Call LLM One-Shot
@@ -116,7 +116,7 @@ pub async fn slice_boq(
         return Err(format!("LLM Error: {}", error_text));
     }
 
-    let _ = app.emit("boq-progress", "Slab Agent received response. Verifying semantic mapping...");
+    let _ = app.emit("boq-progress", "Tawreed Extractor received response. Verifying semantic mapping...");
 
     let result: Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
     let mut category_map: HashMap<String, String> = HashMap::new();
@@ -156,18 +156,18 @@ pub async fn slice_boq(
                             }
                         }
                     } else {
-                        return Err(format!("Slab Agent failed to parse extracted dictionary: {}", json_str));
+                        return Err(format!("Tawreed Extractor failed to parse extracted dictionary: {}", json_str));
                     }
                 } else {
-                    return Err("Slab Agent detected structural anomaly: Malformed JSON boundaries.".into());
+                    return Err("Tawreed Extractor detected structural anomaly: Malformed JSON boundaries.".into());
                 }
             } else {
-                return Err("Slab Agent could not find JSON dictionary in the response.".into());
+                return Err("Tawreed Extractor could not find JSON dictionary in the response.".into());
             }
         }
     }
 
-    let _ = app.emit("boq-progress", "Slab Agent reconstructing workbooks and writing final slices...");
+    let _ = app.emit("boq-progress", "Tawreed Extractor reconstructing workbooks and writing final packages...");
 
     // 3. Reconstruct into categorized Excel
     let mut categorized_data: HashMap<String, Vec<(String, Vec<Data>)>> = HashMap::new();
@@ -175,6 +175,24 @@ pub async fn slice_boq(
     for (row_id, sheet_name, row_data) in all_data {
         let category = category_map.get(&row_id).cloned().unwrap_or_else(|| "Uncategorized".to_string());
         categorized_data.entry(category).or_insert_with(Vec::new).push((sheet_name, row_data));
+    }
+
+    macro_rules! write_data {
+        ($s:expr, $r:expr, $c:expr, $val:expr, $align:expr, $num:expr) => {
+            match $val {
+                Data::Float(f) => { $s.write_number_with_format($r, $c, *f, $num).map_err(|e| e.to_string())?; },
+                Data::Int(i) => { $s.write_number_with_format($r, $c, *i as f64, $num).map_err(|e| e.to_string())?; },
+                Data::String(st) => { 
+                    if let Ok(num) = st.replace(",", "").parse::<f64>() {
+                        $s.write_number_with_format($r, $c, num, $num).map_err(|e| e.to_string())?;
+                    } else {
+                        $s.write_string_with_format($r, $c, st, $align).map_err(|e| e.to_string())?;
+                    }
+                },
+                Data::Bool(b) => { $s.write_boolean_with_format($r, $c, *b, $align).map_err(|e| e.to_string())?; },
+                _ => { $s.write_string_with_format($r, $c, "-", $align).map_err(|e| e.to_string())?; },
+            }
+        }
     }
 
     let mut workbook = Workbook::new();
@@ -235,7 +253,7 @@ pub async fn slice_boq(
     let _ = cover_sheet.set_column_width(1, 50);
 
     cover_sheet.write_with_format(1, 0, "Application", &header_format).map_err(|e| e.to_string())?;
-    cover_sheet.write_with_format(1, 1, "Slab BOQ Slicer - Developed by kareemsafwat.com", &string_format).map_err(|e| e.to_string())?;
+    cover_sheet.write_with_format(1, 1, "Tawreed Work Package Extractor - Developed by kareemsafwat.com", &string_format).map_err(|e| e.to_string())?;
     
     cover_sheet.write_with_format(3, 0, "Project Name", &header_format).map_err(|e| e.to_string())?;
     if let Some(ref name) = project_name {
@@ -275,49 +293,30 @@ pub async fn slice_boq(
             sheet.write_with_format(0, c as u16, *val, &header_format).map_err(|e| e.to_string())?;
         }
 
-        let first_source = &rows[0].0;
-        let mut num_col: Option<u16> = None;
-        let mut desc_col: Option<u16> = None;
-        let mut unit_col: Option<u16> = None;
-        let mut qty_col: Option<u16> = None;
-        let mut rate_col: Option<u16> = None;
-
-        if let Some(source_headers) = headers_map.get(first_source) {
-            for (col, val) in source_headers.iter().enumerate() {
-                let c = col as u16;
-                let lower = val.to_lowercase();
-                
-                let is_num = lower.contains("رقم") || lower.contains("no") || lower.contains("item") || lower.contains("مسلسل");
-                let is_desc = lower.contains("بيان") || lower.contains("وصف") || lower.contains("desc") || (lower.contains("بند") && !lower.contains("رقم"));
-                let is_unit = lower.contains("وحدة") || lower.contains("وحده") || lower.contains("unit");
-                let is_qty = lower.contains("كمية") || lower.contains("كميه") || lower.contains("qty") || lower.contains("quantity");
-                let is_rate = lower.contains("سعر") || lower.contains("فئة") || lower.contains("فئه") || lower.contains("rate") || lower.contains("price");
-
-                if is_num { if num_col.is_none() { num_col = Some(c); } }
-                else if is_desc { if desc_col.is_none() { desc_col = Some(c); } }
-                else if is_unit { if unit_col.is_none() { unit_col = Some(c); } }
-                else if is_qty { if qty_col.is_none() { qty_col = Some(c); } }
-                else if is_rate { if rate_col.is_none() { rate_col = Some(c); } }
-            }
-        }
-        
         let mut current_row: u32 = 1;
-        for (_, row) in rows.iter() {
-            macro_rules! write_data {
-                ($s:expr, $r:expr, $c:expr, $val:expr, $align:expr, $num:expr) => {
-                    match $val {
-                        Data::Float(f) => { $s.write_number_with_format($r, $c, *f, $num).map_err(|e| e.to_string())?; },
-                        Data::Int(i) => { $s.write_number_with_format($r, $c, *i as f64, $num).map_err(|e| e.to_string())?; },
-                        Data::String(st) => { 
-                            if let Ok(num) = st.replace(",", "").parse::<f64>() {
-                                $s.write_number_with_format($r, $c, num, $num).map_err(|e| e.to_string())?;
-                            } else {
-                                $s.write_string_with_format($r, $c, st, $align).map_err(|e| e.to_string())?;
-                            }
-                        },
-                        Data::Bool(b) => { $s.write_boolean_with_format($r, $c, *b, $align).map_err(|e| e.to_string())?; },
-                        _ => { $s.write_string_with_format($r, $c, "-", $align).map_err(|e| e.to_string())?; },
-                    }
+        for (sheet_name, row) in rows.iter() {
+            let mut num_col: Option<u16> = None;
+            let mut desc_col: Option<u16> = None;
+            let mut unit_col: Option<u16> = None;
+            let mut qty_col: Option<u16> = None;
+            let mut rate_col: Option<u16> = None;
+
+            if let Some(source_headers) = headers_map.get(sheet_name) {
+                for (col, val) in source_headers.iter().enumerate() {
+                    let c = col as u16;
+                    let lower = val.to_lowercase();
+                    
+                    let is_desc = lower.contains("بيان") || lower.contains("وصف") || lower.contains("desc") || (lower.contains("بند") && !lower.contains("رقم"));
+                    let is_num = (lower.contains("رقم") || lower.contains("no") || lower.contains("item") || lower.contains("مسلسل")) && !is_desc;
+                    let is_unit = lower.contains("وحدة") || lower.contains("وحده") || lower.contains("unit");
+                    let is_qty = lower.contains("كمية") || lower.contains("كميه") || lower.contains("qty") || lower.contains("quantity");
+                    let is_rate = lower.contains("سعر") || lower.contains("فئة") || lower.contains("فئه") || lower.contains("rate") || lower.contains("price");
+
+                    if is_desc { if desc_col.is_none() { desc_col = Some(c); } }
+                    else if is_num { if num_col.is_none() { num_col = Some(c); } }
+                    else if is_unit { if unit_col.is_none() { unit_col = Some(c); } }
+                    else if is_qty { if qty_col.is_none() { qty_col = Some(c); } }
+                    else if is_rate { if rate_col.is_none() { rate_col = Some(c); } }
                 }
             }
 
@@ -377,24 +376,6 @@ pub async fn slice_boq(
     
     let mut master_row: u32 = 1;
     for (pkg, num_val, desc_val, unit_val, qty_val, rate_val) in master_rows_data {
-        macro_rules! write_data {
-            ($s:expr, $r:expr, $c:expr, $val:expr, $align:expr, $num:expr) => {
-                match $val {
-                    Data::Float(f) => { $s.write_number_with_format($r, $c, *f, $num).map_err(|e| e.to_string())?; },
-                    Data::Int(i) => { $s.write_number_with_format($r, $c, *i as f64, $num).map_err(|e| e.to_string())?; },
-                    Data::String(st) => { 
-                        if let Ok(num) = st.replace(",", "").parse::<f64>() {
-                            $s.write_number_with_format($r, $c, num, $num).map_err(|e| e.to_string())?;
-                        } else {
-                            $s.write_string_with_format($r, $c, st, $align).map_err(|e| e.to_string())?;
-                        }
-                    },
-                    Data::Bool(b) => { $s.write_boolean_with_format($r, $c, *b, $align).map_err(|e| e.to_string())?; },
-                    _ => { $s.write_string_with_format($r, $c, "-", $align).map_err(|e| e.to_string())?; },
-                }
-            }
-        }
-
         write_data!(master_sheet, master_row, 0, &num_val, &center_string_format, &num_format);
         master_sheet.write_string_with_format(master_row, 1, &pkg, &center_string_format).map_err(|e| e.to_string())?;
         write_data!(master_sheet, master_row, 2, &desc_val, &string_format, &num_format);
@@ -422,7 +403,8 @@ pub async fn slice_boq(
 
     workbook.save(&output_path).map_err(|e| format!("Failed to save excel: {}", e))?;
 
-    let _ = app.emit("boq-progress", "Slab Agent execution complete. Payload secured.");
+    let _ = app.emit("boq-progress", "Tawreed Extractor execution complete. Payload secured.");
 
-    Ok(output_path)
+    let total_packages = categorized_data.len() as i64;
+    Ok((output_path, total_packages))
 }

@@ -29,3 +29,6 @@ dist-ssr
 src-tauri/src/bin/test_boq.rs
 src-tauri/target/
 .env
+
+*.env
+.env.*

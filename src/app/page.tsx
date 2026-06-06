@@ -531,7 +531,7 @@ function SettingsScreen({ settings, setSettings }: SettingsScreenProps) {
                     {showApiKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
-                <p className="text-xs text-slate-500 mt-2">Stored securely in your local SQLite database.</p>
+                <p className="text-xs text-slate-500 mt-2">Stored securely in your local JSON config file.</p>
               </div>
               
               <button 

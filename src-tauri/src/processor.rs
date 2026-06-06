@@ -19,9 +19,14 @@ pub async fn extract_work_packages(
 ) -> Result<(String, i64), String> {
     let _ = app.emit("boq-progress", "Initializing Tawreed Extractor core engine...");
 
-    let mut excel: Xlsx<_> = open_workbook(file_path).map_err(|e| format!("Could not open file: {}", e))?;
+    let mut excel: Xlsx<_> = open_workbook(file_path).map_err(|e| {
+        let err = format!("Could not open file: {}", e);
+        tracing::error!("{}", err);
+        err
+    })?;
     let sheet_names = excel.sheet_names().to_owned();
     if sheet_names.is_empty() {
+        tracing::error!("Excel file is empty");
         return Err("Excel file is empty".into());
     }
 
@@ -118,10 +123,15 @@ pub async fn extract_work_packages(
         .json(&req_body)
         .send()
         .await
-        .map_err(|e| format!("Request failed: {}", e))?;
+        .map_err(|e| {
+            let err = format!("Request failed: {}", e);
+            tracing::error!("{}", err);
+            err
+        })?;
 
     if !resp.status().is_success() {
         let error_text = resp.text().await.unwrap_or_default();
+        tracing::error!("LLM Error: {}", error_text);
         return Err(format!("LLM Error: {}", error_text));
     }
 
@@ -332,12 +342,34 @@ pub async fn extract_work_packages(
     }
 
     let mut master_rows_data: Vec<(String, Data, Data, Data, Data, Data)> = Vec::new();
+    let mut used_sheets = std::collections::HashSet::new();
+    used_sheets.insert("cover".to_string());
+    used_sheets.insert("master".to_string());
 
     for (category, rows) in &categorized_data {
-        let mut safe_name = category.replace(&['/', '\\', '?', '*', ':', '[', ']'][..], "").chars().take(31).collect::<String>();
-        if safe_name.is_empty() { safe_name = "Category".to_string(); }
+        let mut safe_name = category.replace(&['/', '\\', '?', '*', ':', '[', ']'][..], "");
+        if safe_name.trim().is_empty() { safe_name = "Category".to_string(); }
 
-        let sheet = workbook.add_worksheet().set_name(&format!("Pkg - {}", safe_name).chars().take(31).collect::<String>()).map_err(|e| e.to_string())?;
+        let base_name = format!("Pkg - {}", safe_name);
+        let mut sheet_name = base_name.chars().take(31).collect::<String>();
+        if used_sheets.contains(&sheet_name.to_lowercase()) {
+            let mut counter = 1;
+            loop {
+                let suffix = format!(" ({})", counter);
+                let max_base_len = 31 - suffix.len();
+                let candidate = format!("{}{}", base_name.chars().take(max_base_len).collect::<String>(), suffix);
+                if !used_sheets.contains(&candidate.to_lowercase()) {
+                    sheet_name = candidate;
+                    break;
+                }
+                counter += 1;
+            }
+        }
+        used_sheets.insert(sheet_name.to_lowercase());
+
+        let deduplicated_package_name = sheet_name.strip_prefix("Pkg - ").unwrap_or(&sheet_name).to_string();
+
+        let sheet = workbook.add_worksheet().set_name(&sheet_name).map_err(|e| e.to_string())?;
         
         sheet.set_print_fit_to_pages(1, 0);
         sheet.set_repeat_rows(0, 0).map_err(|e| e.to_string())?;
@@ -405,7 +437,7 @@ pub async fn extract_work_packages(
 
             sheet.write_formula_with_format(current_row, 5, format!("=IFERROR({}*{}, 0)", pkg_qty_cell, pkg_rate_cell).as_str(), &num_format).map_err(|e| e.to_string())?;
 
-            master_rows_data.push((safe_name.clone(), num_val, desc_val, unit_val, qty_val, rate_val));
+            master_rows_data.push((deduplicated_package_name.clone(), num_val, desc_val, unit_val, qty_val, rate_val));
 
             current_row += 1;
         }
@@ -461,10 +493,70 @@ pub async fn extract_work_packages(
     let output_dir = crate::system::get_outputs_dir()?;
     let output_path = output_dir.join(&file_name).to_string_lossy().into_owned();
 
-    workbook.save(&output_path).map_err(|e| format!("Failed to save excel: {}", e))?;
+    workbook.save(&output_path).map_err(|e| {
+        let err = format!("Failed to save excel: {}", e);
+        tracing::error!("{}", err);
+        err
+    })?;
 
     let _ = app.emit("boq-progress", "Tawreed Extractor execution complete. Payload secured.");
+    tracing::info!("Tawreed Extractor execution complete. Saved to {}", output_path);
 
     let total_packages = categorized_data.len() as i64;
     Ok((output_path, total_packages))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    #[test]
+    fn test_sheet_name_deduplication() {
+        let mut used_sheets = HashSet::new();
+        used_sheets.insert("cover".to_string());
+        used_sheets.insert("master".to_string());
+
+        let categories = vec![
+            "Concrete".to_string(),
+            "Concrete".to_string(), // collision case-insensitive
+            "Very Long Category Name That Exceeds Limit of Character Size".to_string(),
+            "Very Long Category Name That Exceeds Limit of Character Size".to_string(), // collision
+        ];
+
+        let mut results = Vec::new();
+
+        for category in categories {
+            let mut safe_name = category.replace(&['/', '\\', '?', '*', ':', '[', ']'][..], "");
+            if safe_name.trim().is_empty() { safe_name = "Category".to_string(); }
+
+            let base_name = format!("Pkg - {}", safe_name);
+            let mut sheet_name = base_name.chars().take(31).collect::<String>();
+            if used_sheets.contains(&sheet_name.to_lowercase()) {
+                let mut counter = 1;
+                loop {
+                    let suffix = format!(" ({})", counter);
+                    let max_base_len = 31 - suffix.len();
+                    let candidate = format!("{}{}", base_name.chars().take(max_base_len).collect::<String>(), suffix);
+                    if !used_sheets.contains(&candidate.to_lowercase()) {
+                        sheet_name = candidate;
+                        break;
+                    }
+                    counter += 1;
+                }
+            }
+            used_sheets.insert(sheet_name.to_lowercase());
+            results.push(sheet_name);
+        }
+
+        assert_eq!(results[0], "Pkg - Concrete");
+        assert_eq!(results[1], "Pkg - Concrete (1)"); // Wait, Pkg - Concrete lowercase was inserted, so collision resolves to (1)
+        assert_eq!(results[2], "Pkg - Very Long Category Name T");
+        assert_eq!(results[3], "Pkg - Very Long Category Na (1)");
+        
+        // Assert length limits
+        for name in &results {
+            assert!(name.len() <= 31);
+        }
+    }
+}
+

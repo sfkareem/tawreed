@@ -14,10 +14,12 @@ pub fn init_tawreed_env() -> Result<PathBuf, String> {
     let data_dir = tawreed_dir.join("data");
     let logs_dir = tawreed_dir.join("logs");
     let db_dir = tawreed_dir.join("db");
+    let outputs_dir = tawreed_dir.join("outputs");
     
     fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
     fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
     fs::create_dir_all(&db_dir).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&outputs_dir).map_err(|e| e.to_string())?;
     
     let db_path = db_dir.join("tawreed.db");
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
@@ -34,6 +36,11 @@ pub fn init_tawreed_env() -> Result<PathBuf, String> {
     ).map_err(|e| e.to_string())?;
 
     Ok(tawreed_dir)
+}
+
+pub fn get_outputs_dir() -> Result<PathBuf, String> {
+    let user_dirs = UserDirs::new().ok_or("Could not find user home directory")?;
+    Ok(user_dirs.home_dir().join(".tawreed").join("outputs"))
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

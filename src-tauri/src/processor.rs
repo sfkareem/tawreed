@@ -4,6 +4,12 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use tauri::{AppHandle, Emitter};
 
+#[derive(serde::Serialize, Clone)]
+struct StreamPayload {
+    token: String,
+    is_thought: bool,
+}
+
 pub async fn extract_work_packages(
     app: AppHandle,
     file_path: &str,
@@ -100,8 +106,11 @@ pub async fn extract_work_packages(
             {"role": "system", "content": "You output ONLY a raw JSON dictionary mapping IDs to categories. Absolutely no markdown blocks, no intro text."},
             {"role": "user", "content": prompt}
         ],
-        "temperature": 0.0
+        "temperature": 0.0,
+        "stream": true
     });
+
+    let _ = app.emit("boq-progress", "Contacting LLM for category mapping...");
 
     let resp = client
         .post(format!("{}/chat/completions", base_url.trim_end_matches('/')))
@@ -116,18 +125,72 @@ pub async fn extract_work_packages(
         return Err(format!("LLM Error: {}", error_text));
     }
 
+    let _ = app.emit("boq-progress", "Extracting categories from stream...");
+
+    let mut full_response = String::new();
+    let mut reasoning_response = String::new();
+    let mut stream_buf = String::new();
+    let mut reader = resp;
+
+    while let Some(chunk) = reader.chunk().await.map_err(|e| e.to_string())? {
+        let chunk_str = String::from_utf8_lossy(&chunk);
+        stream_buf.push_str(&chunk_str);
+
+        while let Some(pos) = stream_buf.find('\n') {
+            let line = stream_buf[..pos].to_string();
+            stream_buf = stream_buf[pos + 1..].to_string();
+
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if trimmed.starts_with("data: ") {
+                let data = &trimmed[6..];
+                if data == "[DONE]" {
+                    break;
+                }
+                if let Ok(val) = serde_json::from_str::<Value>(data) {
+                    if let Some(choices) = val["choices"].as_array() {
+                        if let Some(choice) = choices.get(0) {
+                            let content_tok = choice["delta"]["content"].as_str().unwrap_or("");
+                            let reasoning_tok = choice["delta"]["reasoning_content"].as_str().unwrap_or("");
+
+                            if !content_tok.is_empty() {
+                                full_response.push_str(content_tok);
+                                
+                                // Determine if token is a thought based on tags
+                                let has_start = full_response.contains("<think>");
+                                let has_end = full_response.contains("</think>");
+                                let is_thought = has_start && !has_end;
+
+                                let _ = app.emit("boq-token", StreamPayload {
+                                    token: content_tok.to_string(),
+                                    is_thought,
+                                });
+                            }
+
+                            if !reasoning_tok.is_empty() {
+                                reasoning_response.push_str(reasoning_tok);
+                                let _ = app.emit("boq-token", StreamPayload {
+                                    token: reasoning_tok.to_string(),
+                                    is_thought: true,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let _ = app.emit("boq-progress", "Tawreed Extractor received response. Verifying semantic mapping...");
 
-    let result: Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
     let mut category_map: HashMap<String, String> = HashMap::new();
     let mut project_name: Option<String> = None;
     let mut project_date: Option<String> = None;
 
-    if let Some(choices) = result["choices"].as_array() {
-        if let Some(msg) = choices.get(0).and_then(|c| c["message"]["content"].as_str()) {
-            
-            // Robust JSON Extraction to ignore hallucinated markdown or conversational text
-            let clean_msg = msg.trim();
+    // Robust JSON Extraction to ignore hallucinated markdown or conversational text
+    let clean_msg = full_response.trim();
             
             // Bypass <think> blocks entirely (Reasoning models often place `{` inside their thoughts)
             let mut actual_content = clean_msg;
@@ -164,8 +227,6 @@ pub async fn extract_work_packages(
             } else {
                 return Err("Tawreed Extractor could not find JSON dictionary in the response.".into());
             }
-        }
-    }
 
     let _ = app.emit("boq-progress", "Tawreed Extractor reconstructing workbooks and writing final packages...");
 
@@ -397,7 +458,7 @@ pub async fn extract_work_packages(
     let date_str = chrono::Local::now().format("%Y-%m-%d").to_string();
     let safe_project_name = project_name.as_deref().unwrap_or("Unknown_Project").replace(" ", "_").replace("/", "_");
     let file_name = format!("{}_{}_Work_Packages_Tawreed.xlsx", date_str, safe_project_name);
-    let output_dir = std::path::Path::new(file_path).parent().unwrap_or(std::path::Path::new(""));
+    let output_dir = crate::system::get_outputs_dir()?;
     let output_path = output_dir.join(&file_name).to_string_lossy().into_owned();
 
     workbook.save(&output_path).map_err(|e| format!("Failed to save excel: {}", e))?;

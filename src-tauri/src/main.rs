@@ -39,6 +39,11 @@ fn get_history(state: State<'_, system::DbState>) -> Result<Vec<system::HistoryR
     system::get_history(&conn)
 }
 
+#[tauri::command]
+fn open_file(path: String) -> Result<(), String> {
+    tauri_plugin_opener::open_path(path, None::<String>).map_err(|e| e.to_string())
+}
+
 fn main() {
     match system::init_tawreed_env() {
         Ok(path) => println!("Tawreed environment initialized at {:?}", path),
@@ -53,7 +58,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(system::DbState { conn: std::sync::Mutex::new(conn) })
-        .invoke_handler(tauri::generate_handler![process_boq, get_settings, save_settings, get_history])
+        .invoke_handler(tauri::generate_handler![process_boq, get_settings, save_settings, get_history, open_file])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

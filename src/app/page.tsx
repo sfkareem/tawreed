@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, FileSpreadsheet, Play, CheckCircle, AlertCircle, Sparkles, Box, LayoutDashboard, History, Settings, Save, Clock, Info, Shield, Code, Zap, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Upload, FileSpreadsheet, Play, CheckCircle, AlertCircle, Sparkles, Box, LayoutDashboard, History, Settings, Save, Clock, Info, Shield, Code, Zap, Eye, EyeOff, Loader2, ExternalLink } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { listen } from '@tauri-apps/api/event';
 
 interface NavItemProps {
   icon: React.ReactNode;
@@ -19,6 +20,15 @@ interface SettingsConfig {
   base_url: string;
 }
 
+interface ExtractionProgress {
+  status: 'idle' | 'processing' | 'success' | 'error';
+  filePath: string;
+  logs: string[];
+  thinking: string;
+  successFilePath: string;
+  errorMessage: string;
+}
+
 interface HistoryRecord {
   id: string;
   project_name: string;
@@ -27,8 +37,69 @@ interface HistoryRecord {
   output_path: string;
 }
 
+const handleOpenFile = async (path: string) => {
+  try {
+    await invoke('open_file', { path });
+  } catch (err) {
+    console.error('Failed to open file:', err);
+  }
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'workspace' | 'history' | 'settings' | 'about'>('workspace');
+  const [settings, setSettings] = useState<SettingsConfig | null>(null);
+  const [extraction, setExtraction] = useState<ExtractionProgress>({
+    status: 'idle',
+    filePath: '',
+    logs: [],
+    thinking: '',
+    successFilePath: '',
+    errorMessage: '',
+  });
+
+  useEffect(() => {
+    invoke<SettingsConfig>('get_settings')
+      .then((s) => setSettings(s))
+      .catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    let unlistenProgress: (() => void) | null = null;
+    let unlistenToken: (() => void) | null = null;
+
+    const setupListeners = async () => {
+      unlistenProgress = await listen<string>('boq-progress', (event) => {
+        setExtraction(prev => ({
+          ...prev,
+          logs: [...prev.logs, event.payload]
+        }));
+      });
+
+      unlistenToken = await listen<{ token: string; is_thought: boolean }>('boq-token', (event) => {
+        const { token, is_thought } = event.payload;
+        setExtraction(prev => {
+          let cleanToken = token;
+          if (token.includes('<think>')) cleanToken = token.replace('<think>', '');
+          if (token.includes('</think>')) cleanToken = token.replace('</think>', '');
+
+          if (is_thought) {
+            return {
+              ...prev,
+              thinking: prev.thinking + cleanToken
+            };
+          }
+          return prev;
+        });
+      });
+    };
+
+    setupListeners();
+
+    return () => {
+      if (unlistenProgress) unlistenProgress();
+      if (unlistenToken) unlistenToken();
+    };
+  }, []);
   
   return (
     <div className="flex h-screen bg-[#030305] text-slate-50 font-sans overflow-hidden selection:bg-blue-500/30 relative">
@@ -68,9 +139,9 @@ export default function App() {
       <div className="flex-1 relative overflow-x-hidden overflow-y-auto custom-scrollbar z-10">
         <div className="min-h-full flex flex-col items-center justify-center p-4 sm:p-8 md:p-12">
           <AnimatePresence mode="wait">
-            {activeTab === 'workspace' && <Workspace key="workspace" />}
+            {activeTab === 'workspace' && <Workspace key="workspace" settings={settings} extraction={extraction} setExtraction={setExtraction} />}
             {activeTab === 'history' && <HistoryScreen key="history" />}
-            {activeTab === 'settings' && <SettingsScreen key="settings" />}
+            {activeTab === 'settings' && <SettingsScreen key="settings" settings={settings} setSettings={setSettings} />}
             {activeTab === 'about' && <AboutScreen key="about" />}
           </AnimatePresence>
         </div>
@@ -100,22 +171,13 @@ function NavItem({ icon, label, isActive, onClick }: NavItemProps) {
   );
 }
 
-function Workspace() {
-  const [filePath, setFilePath] = useState('');
-  const [status, setStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
-  const [message, setMessage] = useState('');
-  const [settings, setSettings] = useState<SettingsConfig | null>(null);
+interface WorkspaceProps {
+  settings: SettingsConfig | null;
+  extraction: ExtractionProgress;
+  setExtraction: React.Dispatch<React.SetStateAction<ExtractionProgress>>;
+}
 
-  useEffect(() => {
-    invoke<SettingsConfig>('get_settings')
-      .then((s) => setSettings(s))
-      .catch((err) => {
-        console.error(err);
-        setMessage(err instanceof Error ? err.message : String(err));
-        setStatus('error');
-      });
-  }, []);
-
+function Workspace({ settings, extraction, setExtraction }: WorkspaceProps) {
   const selectFile = async () => {
     try {
       const selected = await open({
@@ -123,8 +185,15 @@ function Workspace() {
         filters: [{ name: 'Excel', extensions: ['xlsx', 'xls'] }]
       });
       if (selected && typeof selected === 'string') {
-        setFilePath(selected);
-        setStatus('idle');
+        setExtraction(prev => ({
+          ...prev,
+          filePath: selected,
+          status: 'idle',
+          logs: [],
+          thinking: '',
+          successFilePath: '',
+          errorMessage: ''
+        }));
       }
     } catch (err) {
       console.error(err);
@@ -132,20 +201,38 @@ function Workspace() {
   };
 
   const processFile = async () => {
-    if (!filePath || !settings) return;
-    setStatus('processing');
+    if (!extraction.filePath || !settings) return;
+    
+    setExtraction(prev => ({
+      ...prev,
+      status: 'processing',
+      logs: ['Initializing core engine...'],
+      thinking: '',
+      successFilePath: '',
+      errorMessage: ''
+    }));
+
     try {
       const res: string = await invoke('process_boq', {
-        filePath,
+        filePath: extraction.filePath,
         baseUrl: settings.base_url,
         model: settings.model_id,
         apiKey: settings.api_key
       });
-      setMessage(`Successfully extracted to: ${res.replace(/\\/g, '/').split('/').pop()}`);
-      setStatus('success');
+      setExtraction(prev => ({
+        ...prev,
+        status: 'success',
+        successFilePath: res,
+        logs: [...prev.logs, 'Extraction execution complete. Workbook saved.']
+      }));
     } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : String(err));
-      setStatus('error');
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setExtraction(prev => ({
+        ...prev,
+        status: 'error',
+        errorMessage: errMsg,
+        logs: [...prev.logs, `Extraction execution failed: ${errMsg}`]
+      }));
     }
   };
 
@@ -175,15 +262,15 @@ function Workspace() {
         {/* Upload Zone */}
         <div className="relative z-20 mb-8">
           <motion.div 
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            onClick={selectFile}
-            className="relative group cursor-pointer"
+            whileHover={extraction.status !== 'processing' ? { scale: 1.01 } : {}}
+            whileTap={extraction.status !== 'processing' ? { scale: 0.99 } : {}}
+            onClick={extraction.status !== 'processing' ? selectFile : undefined}
+            className={`relative group ${extraction.status !== 'processing' ? 'cursor-pointer' : 'cursor-not-allowed'}`}
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-emerald-500/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-emerald-500/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
             <div className="relative border-2 border-dashed border-slate-700/60 hover:border-blue-500/50 bg-black/20 backdrop-blur-sm rounded-3xl p-8 sm:p-10 text-center transition-all duration-300">
               <AnimatePresence mode="wait">
-                {filePath ? (
+                {extraction.filePath ? (
                   <motion.div 
                     key="file"
                     initial={{ opacity: 0, scale: 0.95 }}
@@ -196,9 +283,11 @@ function Workspace() {
                     </div>
                     <div className="flex flex-col items-center w-full">
                       <span className="text-blue-300 font-semibold text-lg sm:text-xl px-2 sm:px-4 truncate w-full max-w-[200px] sm:max-w-[320px]">
-                        {filePath.replace(/\\/g, '/').split('/').pop()}
+                        {extraction.filePath.replace(/\\/g, '/').split('/').pop()}
                       </span>
-                      <span className="text-slate-500 text-xs sm:text-sm mt-1">Ready for processing</span>
+                      <span className="text-slate-500 text-xs sm:text-sm mt-1">
+                        {extraction.status === 'processing' ? 'Processing...' : 'Ready for processing'}
+                      </span>
                     </div>
                   </motion.div>
                 ) : (
@@ -224,12 +313,12 @@ function Workspace() {
         </div>
 
         {/* Action Button */}
-        <div className="relative z-20">
+        <div className="relative z-20 mb-6">
           <motion.button
-            whileHover={filePath && status !== 'processing' && settings?.api_key ? { scale: 1.01 } : {}}
-            whileTap={filePath && status !== 'processing' && settings?.api_key ? { scale: 0.99 } : {}}
+            whileHover={extraction.filePath && extraction.status !== 'processing' && settings?.api_key ? { scale: 1.01 } : {}}
+            whileTap={extraction.filePath && extraction.status !== 'processing' && settings?.api_key ? { scale: 0.99 } : {}}
             onClick={processFile}
-            disabled={!filePath || status === 'processing' || !settings?.api_key}
+            disabled={!extraction.filePath || extraction.status === 'processing' || !settings?.api_key}
             className="relative w-full h-14 sm:h-16 rounded-2xl font-bold text-base sm:text-lg overflow-hidden group disabled:cursor-not-allowed"
           >
             {/* Disabled State Background */}
@@ -244,7 +333,7 @@ function Workspace() {
                   <Settings className="w-5 h-5 text-slate-500" />
                   <span className="text-slate-400 font-medium">Configure API Key in Settings</span>
                 </>
-              ) : status === 'processing' ? (
+              ) : extraction.status === 'processing' ? (
                 <>
                   <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
                     <Sparkles className="w-5 h-5 text-white" />
@@ -261,33 +350,76 @@ function Workspace() {
           </motion.button>
         </div>
 
+        {/* Real-time LLM Thinking Card */}
+        {extraction.status === 'processing' && extraction.thinking && (
+          <div className="mb-6 bg-blue-500/[0.03] border border-blue-500/10 rounded-2xl p-5 backdrop-blur-md relative z-20">
+            <div className="flex items-center gap-2 mb-3 text-blue-400 font-semibold text-sm">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+              </span>
+              <span>LLM Thinking Process</span>
+            </div>
+            <div className="max-h-40 overflow-y-auto font-mono text-xs text-slate-400 whitespace-pre-wrap leading-relaxed custom-scrollbar text-left">
+              {extraction.thinking}
+            </div>
+          </div>
+        )}
+
+        {/* Real-time Progress Terminal */}
+        {extraction.status === 'processing' && extraction.logs.length > 0 && (
+          <div className="mb-6 bg-black/40 border border-white/5 rounded-2xl p-5 font-mono text-xs text-emerald-400/90 shadow-inner relative z-20 text-left">
+            <div className="flex items-center justify-between border-b border-white/5 pb-2 mb-3 text-slate-500 font-sans font-medium">
+              <span>Console Logs</span>
+              <span className="animate-pulse">Active</span>
+            </div>
+            <div className="max-h-32 overflow-y-auto space-y-1.5 custom-scrollbar">
+              {extraction.logs.map((log, index) => (
+                <div key={index} className="flex gap-2 items-start">
+                  <span className="text-slate-600 select-none">&gt;</span>
+                  <span>{log}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Status Messages */}
         <AnimatePresence>
-          {status === 'success' && (
+          {extraction.status === 'success' && (
             <motion.div 
-              initial={{ opacity: 0, height: 0, marginTop: 0 }} 
-              animate={{ opacity: 1, height: 'auto', marginTop: 24 }} 
-              exit={{ opacity: 0, height: 0, marginTop: 0 }}
-              className="relative z-20 overflow-hidden"
+              initial={{ opacity: 0, height: 0 }} 
+              animate={{ opacity: 1, height: 'auto', marginTop: 20 }} 
+              exit={{ opacity: 0, height: 0 }}
+              className="relative z-20 overflow-hidden text-left"
             >
               <div className="p-4 sm:p-5 bg-emerald-500/10 border border-emerald-500/20 backdrop-blur-md rounded-2xl flex gap-3 sm:gap-4 items-start shadow-[0_0_30px_rgba(16,185,129,0.1)]">
                 <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                   <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <h4 className="text-emerald-400 font-semibold mb-1 text-sm sm:text-base">Processing Complete</h4>
-                  <p className="text-emerald-400/80 text-xs sm:text-sm leading-relaxed break-all">{message}</p>
+                  <p className="text-emerald-400/80 text-xs sm:text-sm leading-relaxed break-all mb-3">
+                    Successfully extracted to: {extraction.successFilePath.replace(/\\/g, '/').split('/').pop()}
+                  </p>
+                  <button
+                    onClick={() => handleOpenFile(extraction.successFilePath)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-500/30 rounded-lg text-emerald-300 font-semibold text-xs sm:text-sm transition-all duration-200"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Open Work Packages File
+                  </button>
                 </div>
               </div>
             </motion.div>
           )}
           
-          {status === 'error' && (
+          {extraction.status === 'error' && (
             <motion.div 
-              initial={{ opacity: 0, height: 0, marginTop: 0 }} 
-              animate={{ opacity: 1, height: 'auto', marginTop: 24 }} 
-              exit={{ opacity: 0, height: 0, marginTop: 0 }}
-              className="relative z-20 overflow-hidden"
+              initial={{ opacity: 0, height: 0 }} 
+              animate={{ opacity: 1, height: 'auto', marginTop: 20 }} 
+              exit={{ opacity: 0, height: 0 }}
+              className="relative z-20 overflow-hidden text-left"
             >
               <div className="p-4 sm:p-5 bg-rose-500/10 border border-rose-500/20 backdrop-blur-md rounded-2xl flex gap-3 sm:gap-4 items-start shadow-[0_0_30px_rgba(244,63,94,0.1)]">
                 <div className="w-8 h-8 rounded-full bg-rose-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -295,7 +427,7 @@ function Workspace() {
                 </div>
                 <div>
                   <h4 className="text-rose-400 font-semibold mb-1 text-sm sm:text-base">Extraction Failed</h4>
-                  <p className="text-rose-400/80 text-xs sm:text-sm leading-relaxed break-words">{message}</p>
+                  <p className="text-rose-400/80 text-xs sm:text-sm leading-relaxed break-words">{extraction.errorMessage}</p>
                 </div>
               </div>
             </motion.div>
@@ -307,30 +439,32 @@ function Workspace() {
   );
 }
 
-function SettingsScreen() {
-  const [apiKey, setApiKey] = useState('');
-  const [modelId, setModelId] = useState('');
-  const [baseUrl, setBaseUrl] = useState('');
+interface SettingsScreenProps {
+  settings: SettingsConfig | null;
+  setSettings: React.Dispatch<React.SetStateAction<SettingsConfig | null>>;
+}
+
+function SettingsScreen({ settings, setSettings }: SettingsScreenProps) {
+  const [apiKey, setApiKey] = useState(settings?.api_key || '');
+  const [modelId, setModelId] = useState(settings?.model_id || '');
+  const [baseUrl, setBaseUrl] = useState(settings?.base_url || '');
   const [status, setStatus] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!settings);
   const [showApiKey, setShowApiKey] = useState(false);
 
   useEffect(() => {
-    invoke<SettingsConfig>('get_settings').then((s) => {
-      setApiKey(s.api_key);
-      setModelId(s.model_id);
-      setBaseUrl(s.base_url);
+    if (settings) {
+      setApiKey(settings.api_key);
+      setModelId(settings.model_id);
+      setBaseUrl(settings.base_url);
       setIsLoading(false);
-    }).catch((err) => {
-      console.error(err);
-      setStatus(`Error loading settings: ${err instanceof Error ? err.message : String(err)}`);
-      setIsLoading(false);
-    });
-  }, []);
+    }
+  }, [settings]);
 
   const saveSettings = async () => {
     try {
       await invoke('save_settings', { apiKey, modelId, baseUrl });
+      setSettings({ api_key: apiKey, model_id: modelId, base_url: baseUrl });
       setStatus('Settings saved securely.');
       setTimeout(() => setStatus(''), 3000);
     } catch (err: unknown) {
@@ -484,9 +618,18 @@ function HistoryScreen() {
                       <p className="text-[10px] sm:text-xs text-slate-500 mb-1">Generated</p>
                       <p className="font-medium text-emerald-400 text-xs sm:text-sm">{record.packages_count} Packages</p>
                     </div>
-                    <div className="text-left sm:text-right max-w-[150px] sm:max-w-[200px]">
-                      <p className="text-[10px] sm:text-xs text-slate-500 mb-1">Output</p>
-                      <p className="text-xs text-blue-300 truncate" title={record.output_path}>{record.output_path}</p>
+                    <div className="text-left sm:text-right max-w-[150px] sm:max-w-[200px] flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] sm:text-xs text-slate-500 mb-1">Output</p>
+                        <p className="text-xs text-blue-300 truncate" title={record.output_path}>{record.output_path}</p>
+                      </div>
+                      <button
+                        onClick={() => handleOpenFile(record.output_path)}
+                        className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors flex-shrink-0"
+                        title="Open File"
+                      >
+                        <ExternalLink className="w-4.5 h-4.5" />
+                      </button>
                     </div>
                   </div>
                 </div>

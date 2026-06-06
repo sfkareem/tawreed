@@ -308,7 +308,13 @@ pub async fn slice_boq(
                     match $val {
                         Data::Float(f) => { $s.write_number_with_format($r, $c, *f, $num).map_err(|e| e.to_string())?; },
                         Data::Int(i) => { $s.write_number_with_format($r, $c, *i as f64, $num).map_err(|e| e.to_string())?; },
-                        Data::String(st) => { $s.write_string_with_format($r, $c, st, $align).map_err(|e| e.to_string())?; },
+                        Data::String(st) => { 
+                            if let Ok(num) = st.replace(",", "").parse::<f64>() {
+                                $s.write_number_with_format($r, $c, num, $num).map_err(|e| e.to_string())?;
+                            } else {
+                                $s.write_string_with_format($r, $c, st, $align).map_err(|e| e.to_string())?;
+                            }
+                        },
                         Data::Bool(b) => { $s.write_boolean_with_format($r, $c, *b, $align).map_err(|e| e.to_string())?; },
                         _ => { $s.write_string_with_format($r, $c, "-", $align).map_err(|e| e.to_string())?; },
                     }
@@ -376,7 +382,13 @@ pub async fn slice_boq(
                 match $val {
                     Data::Float(f) => { $s.write_number_with_format($r, $c, *f, $num).map_err(|e| e.to_string())?; },
                     Data::Int(i) => { $s.write_number_with_format($r, $c, *i as f64, $num).map_err(|e| e.to_string())?; },
-                    Data::String(st) => { $s.write_string_with_format($r, $c, st, $align).map_err(|e| e.to_string())?; },
+                    Data::String(st) => { 
+                        if let Ok(num) = st.replace(",", "").parse::<f64>() {
+                            $s.write_number_with_format($r, $c, num, $num).map_err(|e| e.to_string())?;
+                        } else {
+                            $s.write_string_with_format($r, $c, st, $align).map_err(|e| e.to_string())?;
+                        }
+                    },
                     Data::Bool(b) => { $s.write_boolean_with_format($r, $c, *b, $align).map_err(|e| e.to_string())?; },
                     _ => { $s.write_string_with_format($r, $c, "-", $align).map_err(|e| e.to_string())?; },
                 }
@@ -402,7 +414,12 @@ pub async fn slice_boq(
         master_sheet.add_table(0, 0, master_row - 1, 6, &table).map_err(|e| e.to_string())?;
     }
 
-    let output_path = format!("{}_sliced.xlsx", file_path);
+    let date_str = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let safe_project_name = project_name.as_deref().unwrap_or("Unknown_Project").replace(" ", "_").replace("/", "_");
+    let file_name = format!("{}_{}_Work_Packages_Tawreed.xlsx", date_str, safe_project_name);
+    let output_dir = std::path::Path::new(file_path).parent().unwrap_or(std::path::Path::new(""));
+    let output_path = output_dir.join(&file_name).to_string_lossy().into_owned();
+
     workbook.save(&output_path).map_err(|e| format!("Failed to save excel: {}", e))?;
 
     let _ = app.emit("boq-progress", "Slab Agent execution complete. Payload secured.");

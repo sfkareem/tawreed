@@ -1,17 +1,30 @@
+
+fn main() {
+    let file = r#"C:\Users\karee\Desktop\طلب مقاول لأعمال غرف التفتيش.xlsx"#;
+    let base = "https://api.minimax.io/v1";
+    let model = "MiniMax-M3";
+    let key = "sk-cp-ucyiKsDruv0-1ruecr0A-hoHvr9kTQH9WQUTikhd5r_cuAzGnD8aSjF-L2k1rvQ5oBRdqKyfoPSywKqER6dshrlspCmusOzbNhJENwyD40KiIrNE7nWPGwA";
+    
+    println!("Starting test runner...");
+    tauri::async_runtime::block_on(async {
+        match slice_boq(file, base, model, key).await {
+            Ok(path) => println!("SUCCESS: {}", path),
+            Err(e) => println!("ERROR: {}", e),
+        }
+    });
+}
 use calamine::{open_workbook, Data, Reader, Xlsx};
 use rust_xlsxwriter::{Workbook, Format, FormatBorder, Color, FormatAlign, Table};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use tauri::{AppHandle, Emitter};
 
-pub async fn slice_boq(
-    app: AppHandle,
+async fn slice_boq(
     file_path: &str,
     base_url: &str,
     model: &str,
     api_key: &str,
 ) -> Result<String, String> {
-    let _ = app.emit("boq-progress", "Initializing Slab Agent core engine...");
+    println!("Progress: {}", "Initializing Slab Agent core engine...");
 
     let mut excel: Xlsx<_> = open_workbook(file_path).map_err(|e| format!("Could not open file: {}", e))?;
     let sheet_names = excel.sheet_names().to_owned();
@@ -19,7 +32,7 @@ pub async fn slice_boq(
         return Err("Excel file is empty".into());
     }
 
-    let _ = app.emit("boq-progress", format!("Slab Agent mapping structural relationships across {} sheets...", sheet_names.len()));
+    println!("Progress: {}", format!("Slab Agent mapping structural relationships across {} sheets...", sheet_names.len()));
 
     let mut all_data: Vec<(String, String, Vec<Data>)> = Vec::new(); // (row_id, sheet_name, original_row_data)
     let mut headers_map: HashMap<String, Vec<String>> = HashMap::new();
@@ -76,8 +89,8 @@ pub async fn slice_boq(
         }
     }
 
-    let _ = app.emit("boq-progress", format!("Slab Agent compressed {} unique items into token-efficient payload...", global_row_id - 1));
-    let _ = app.emit("boq-progress", "Dispatching payload to remote LLM for structural categorization...");
+    println!("Progress: {}", format!("Slab Agent compressed {} unique items into token-efficient payload...", global_row_id - 1));
+    println!("Progress: {}", "Dispatching payload to remote LLM for structural categorization...");
 
     // 2. Call LLM One-Shot
     let prompt = format!(
@@ -116,7 +129,7 @@ pub async fn slice_boq(
         return Err(format!("LLM Error: {}", error_text));
     }
 
-    let _ = app.emit("boq-progress", "Slab Agent received response. Verifying semantic mapping...");
+    println!("Progress: {}", "Slab Agent received response. Verifying semantic mapping...");
 
     let result: Value = resp.json().await.map_err(|e| format!("Parse error: {}", e))?;
     let mut category_map: HashMap<String, String> = HashMap::new();
@@ -167,7 +180,7 @@ pub async fn slice_boq(
         }
     }
 
-    let _ = app.emit("boq-progress", "Slab Agent reconstructing workbooks and writing final slices...");
+    println!("Progress: {}", "Slab Agent reconstructing workbooks and writing final slices...");
 
     // 3. Reconstruct into categorized Excel
     let mut categorized_data: HashMap<String, Vec<(String, Vec<Data>)>> = HashMap::new();
@@ -178,6 +191,9 @@ pub async fn slice_boq(
     }
 
     let mut workbook = Workbook::new();
+
+    // 4. Create Master Summary Sheet placeholder (so it becomes the first tab)
+    let _ = workbook.add_worksheet().set_name("Master Summary").map_err(|e| e.to_string())?;
 
     // Define Formatting Standards
     let header_format = Format::new()
@@ -405,7 +421,7 @@ pub async fn slice_boq(
     let output_path = format!("{}_sliced.xlsx", file_path);
     workbook.save(&output_path).map_err(|e| format!("Failed to save excel: {}", e))?;
 
-    let _ = app.emit("boq-progress", "Slab Agent execution complete. Payload secured.");
+    println!("Progress: {}", "Slab Agent execution complete. Payload secured.");
 
     Ok(output_path)
 }

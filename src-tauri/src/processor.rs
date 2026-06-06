@@ -1,4 +1,4 @@
-use calamine::{open_workbook, Data, Reader, Xlsx, DataType};
+use calamine::{open_workbook, Data, Reader, Xlsx};
 use rust_xlsxwriter::{Workbook, Format, FormatBorder, Color, FormatAlign};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -243,138 +243,138 @@ pub async fn slice_boq(
         cover_sheet.write_with_format(4, 1, "", &unfilled_format).map_err(|e| e.to_string())?;
     }
 
-    let mut category_totals_info: Vec<(String, String)> = Vec::new(); // (CategoryName, AbsoluteCellReference)
+    let mut master_rows_data: Vec<(String, Data, Data, Data, Data, Data)> = Vec::new();
 
     for (category, rows) in &categorized_data {
         let mut safe_name = category.replace(&['/', '\\', '?', '*', ':', '[', ']'][..], "").chars().take(31).collect::<String>();
         if safe_name.is_empty() { safe_name = "Category".to_string(); }
 
-        let sheet = workbook.add_worksheet().set_name(&safe_name).map_err(|e| e.to_string())?;
+        let sheet = workbook.add_worksheet().set_name(&format!("Pkg - {}", safe_name).chars().take(31).collect::<String>()).map_err(|e| e.to_string())?;
         
-        // CRITICAL: Arabic Right-To-Left direction
         sheet.set_right_to_left(true);
+        sheet.set_print_fit_to_pages(1, 0);
+        sheet.set_repeat_rows(0, 0).map_err(|e| e.to_string())?;
 
-        // Professional column widths
-        let _ = sheet.set_column_width(0, 20); // Source sheet name
-        let _ = sheet.set_column_width(1, 15); // Item ID
-        let _ = sheet.set_column_width(2, 60); // Description
-        let _ = sheet.set_column_width(3, 15); // Unit
-        let _ = sheet.set_column_width(4, 15); // Qty
-        let _ = sheet.set_column_width(5, 15); // Rate
-        let _ = sheet.set_column_width(6, 15); // Total
+        let _ = sheet.set_column_width(0, 15); // Number
+        let _ = sheet.set_column_width(1, 60); // Description
+        let _ = sheet.set_column_width(2, 15); // Unit
+        let _ = sheet.set_column_width(3, 15); // Qty
+        let _ = sheet.set_column_width(4, 15); // Rate
+        let _ = sheet.set_column_width(5, 15); // Amount
+
+        let pkg_headers = ["Number", "Item Description", "Unit", "Quantity", "Rate", "Amount"];
+        for (c, val) in pkg_headers.iter().enumerate() {
+            sheet.write_with_format(0, c as u16, *val, &header_format).map_err(|e| e.to_string())?;
+        }
 
         let first_source = &rows[0].0;
+        let mut num_col: Option<u16> = None;
+        let mut desc_col: Option<u16> = None;
+        let mut unit_col: Option<u16> = None;
         let mut qty_col: Option<u16> = None;
         let mut rate_col: Option<u16> = None;
-        let mut total_col: Option<u16> = None;
 
-        // Write Header
-        sheet.write_with_format(0, 0, "Source Sheet", &header_format).map_err(|e| e.to_string())?;
-        
-        if let Some(headers) = headers_map.get(first_source) {
-            for (col, val) in headers.iter().enumerate() {
-                let c = (col + 1) as u16;
-                sheet.write_with_format(0, c, val, &header_format).map_err(|e| e.to_string())?;
-                
+        if let Some(source_headers) = headers_map.get(first_source) {
+            for (col, val) in source_headers.iter().enumerate() {
+                let c = col as u16;
                 let lower = val.to_lowercase();
+                if lower.contains("بند") || lower.contains("رقم") || lower.contains("no") || lower.contains("item") { if num_col.is_none() { num_col = Some(c); } }
+                if lower.contains("بيان") || lower.contains("وصف") || lower.contains("desc") { desc_col = Some(c); }
+                if lower.contains("وحدة") || lower.contains("unit") { unit_col = Some(c); }
                 if lower.contains("كمية") || lower.contains("qty") || lower.contains("quantity") { qty_col = Some(c); }
                 if lower.contains("سعر") || lower.contains("فئة") || lower.contains("rate") || lower.contains("price") { rate_col = Some(c); }
-                if lower.contains("اجمالي") || lower.contains("جملة") || lower.contains("total") || lower.contains("amount") { total_col = Some(c); }
             }
         }
-
+        
         let mut current_row: u32 = 1;
-
-        // Write Rows
-        for (source_sheet, row) in rows.iter() {
-            sheet.write_with_format(current_row, 0, source_sheet, &center_string_format).map_err(|e| e.to_string())?;
-            
-            for (c_idx, val) in row.iter().enumerate() {
-                let c = (c_idx + 1) as u16;
-                
-                let mut is_missing = false;
-                if Some(c) == qty_col || Some(c) == rate_col {
-                    if let Data::Empty = val { is_missing = true; }
-                    else if let Data::String(s) = val { if s.trim().is_empty() { is_missing = true; } }
-                    else if let Data::Float(f) = val { if *f == 0.0 { is_missing = true; } }
-                    else if let Data::Int(i) = val { if *i == 0 { is_missing = true; } }
-
-                    if is_missing {
-                        let _ = app.emit("boq-warning", format!("⚠️ Missing {} in sheet '{}', row '{}'", 
-                            if Some(c) == qty_col { "Quantity" } else { "Rate" }, source_sheet, current_row));
-                    }
-                }
-
-                let active_format = if is_missing { 
-                    &warning_format 
-                } else if val.is_float() || val.is_int() { 
-                    &num_format 
-                } else if c == 1 || c == 3 { 
-                    &center_string_format 
-                } else { 
-                    &string_format 
-                };
-
-                if Some(c) == total_col && qty_col.is_some() && rate_col.is_some() {
-                    let qty_cell = rust_xlsxwriter::utility::row_col_to_cell(current_row, qty_col.unwrap());
-                    let rate_cell = rust_xlsxwriter::utility::row_col_to_cell(current_row, rate_col.unwrap());
-                    let formula = format!("={}*{}", qty_cell, rate_cell);
-                    sheet.write_formula_with_format(current_row, c, formula.as_str(), &num_format).map_err(|e| e.to_string())?;
-                } else {
-                    match val {
-                        Data::Float(f) => { sheet.write_number_with_format(current_row, c, *f, active_format).map_err(|e| e.to_string())?; },
-                        Data::Int(i) => { sheet.write_number_with_format(current_row, c, *i as f64, active_format).map_err(|e| e.to_string())?; },
-                        Data::String(s) => { sheet.write_string_with_format(current_row, c, s, active_format).map_err(|e| e.to_string())?; },
-                        Data::Bool(b) => { sheet.write_boolean_with_format(current_row, c, *b, active_format).map_err(|e| e.to_string())?; },
-                        _ => { sheet.write_string_with_format(current_row, c, "-", active_format).map_err(|e| e.to_string())?; },
+        for (_, row) in rows.iter() {
+            macro_rules! write_data {
+                ($s:expr, $r:expr, $c:expr, $val:expr, $align:expr, $num:expr) => {
+                    match $val {
+                        Data::Float(f) => { $s.write_number_with_format($r, $c, *f, $num).map_err(|e| e.to_string())?; },
+                        Data::Int(i) => { $s.write_number_with_format($r, $c, *i as f64, $num).map_err(|e| e.to_string())?; },
+                        Data::String(st) => { $s.write_string_with_format($r, $c, st, $align).map_err(|e| e.to_string())?; },
+                        Data::Bool(b) => { $s.write_boolean_with_format($r, $c, *b, $align).map_err(|e| e.to_string())?; },
+                        _ => { $s.write_string_with_format($r, $c, "-", $align).map_err(|e| e.to_string())?; },
                     }
                 }
             }
+
+            let mut num_val = Data::Empty;
+            if let Some(c) = num_col { if let Some(v) = row.get(c as usize) { num_val = v.clone(); } }
+            write_data!(sheet, current_row, 0, &num_val, &center_string_format, &num_format);
+
+            let mut desc_val = Data::Empty;
+            if let Some(c) = desc_col { if let Some(v) = row.get(c as usize) { desc_val = v.clone(); } }
+            write_data!(sheet, current_row, 1, &desc_val, &string_format, &num_format);
+
+            let mut unit_val = Data::Empty;
+            if let Some(c) = unit_col { if let Some(v) = row.get(c as usize) { unit_val = v.clone(); } }
+            write_data!(sheet, current_row, 2, &unit_val, &center_string_format, &num_format);
+
+            let mut qty_val = Data::Empty;
+            if let Some(c) = qty_col { if let Some(v) = row.get(c as usize) { qty_val = v.clone(); } }
+            write_data!(sheet, current_row, 3, &qty_val, &num_format, &num_format);
+            let pkg_qty_cell = rust_xlsxwriter::utility::row_col_to_cell(current_row, 3);
+
+            let mut rate_val = Data::Empty;
+            if let Some(c) = rate_col { if let Some(v) = row.get(c as usize) { rate_val = v.clone(); } }
+            write_data!(sheet, current_row, 4, &rate_val, &num_format, &num_format);
+            let pkg_rate_cell = rust_xlsxwriter::utility::row_col_to_cell(current_row, 4);
+
+            sheet.write_formula_with_format(current_row, 5, format!("={}*{}", pkg_qty_cell, pkg_rate_cell).as_str(), &num_format).map_err(|e| e.to_string())?;
+
+            master_rows_data.push((safe_name.clone(), num_val, desc_val, unit_val, qty_val, rate_val));
+
             current_row += 1;
-        }
-
-        // Write Category Summary Row
-        if let Some(t_col) = total_col {
-            if current_row > 1 {
-                let start_cell = rust_xlsxwriter::utility::row_col_to_cell(1, t_col);
-                let end_cell = rust_xlsxwriter::utility::row_col_to_cell(current_row - 1, t_col);
-                let sum_formula = format!("=SUM({}:{})", start_cell, end_cell);
-                
-                sheet.write_with_format(current_row, t_col - 1, "الاجمالي (Total)", &header_format).map_err(|e| e.to_string())?;
-                sheet.write_formula_with_format(current_row, t_col, sum_formula.as_str(), &header_format).map_err(|e| e.to_string())?;
-                
-                let total_ref_cell = rust_xlsxwriter::utility::row_col_to_cell_absolute(current_row, t_col);
-                category_totals_info.push((safe_name.clone(), total_ref_cell));
-            }
         }
     }
 
-    // 5. Populate Master Summary Sheet
-    if !category_totals_info.is_empty() {
-        let mut summary_sheet = workbook.worksheet_from_name("Master Summary").map_err(|e| e.to_string())?;
-        summary_sheet.set_right_to_left(true);
+    // 5. Master Sheet Setup
+    let mut master_sheet = workbook.add_worksheet().set_name("Master").map_err(|e| e.to_string())?;
+    master_sheet.set_right_to_left(true);
+    master_sheet.set_print_fit_to_pages(1, 0);
+    master_sheet.set_repeat_rows(0, 0).map_err(|e| e.to_string())?;
 
-        let _ = summary_sheet.set_column_width(0, 40);
-        let _ = summary_sheet.set_column_width(1, 25);
+    let _ = master_sheet.set_column_width(0, 15); // Number
+    let _ = master_sheet.set_column_width(1, 20); // Package
+    let _ = master_sheet.set_column_width(2, 60); // Description
+    let _ = master_sheet.set_column_width(3, 15); // Unit
+    let _ = master_sheet.set_column_width(4, 15); // Qty
+    let _ = master_sheet.set_column_width(5, 15); // Rate
+    let _ = master_sheet.set_column_width(6, 15); // Amount
 
-        summary_sheet.write_with_format(0, 0, "القسم (Category)", &header_format).map_err(|e| e.to_string())?;
-        summary_sheet.write_with_format(0, 1, "القيمة (Amount)", &header_format).map_err(|e| e.to_string())?;
-
-        let mut sum_row = 1;
-        for (cat_name, cell_ref) in &category_totals_info {
-            summary_sheet.write_with_format(sum_row, 0, cat_name, &string_format).map_err(|e| e.to_string())?;
-            let link_formula = format!("='{}'!{}", cat_name, cell_ref);
-            summary_sheet.write_formula_with_format(sum_row, 1, link_formula.as_str(), &num_format).map_err(|e| e.to_string())?;
-            sum_row += 1;
+    let master_headers = ["Number", "Package", "Item Description", "Unit", "Quantity", "Rate", "Amount"];
+    for (c, val) in master_headers.iter().enumerate() {
+        master_sheet.write_with_format(0, c as u16, *val, &header_format).map_err(|e| e.to_string())?;
+    }
+    
+    let mut master_row: u32 = 1;
+    for (pkg, num_val, desc_val, unit_val, qty_val, rate_val) in master_rows_data {
+        macro_rules! write_data {
+            ($s:expr, $r:expr, $c:expr, $val:expr, $align:expr, $num:expr) => {
+                match $val {
+                    Data::Float(f) => { $s.write_number_with_format($r, $c, *f, $num).map_err(|e| e.to_string())?; },
+                    Data::Int(i) => { $s.write_number_with_format($r, $c, *i as f64, $num).map_err(|e| e.to_string())?; },
+                    Data::String(st) => { $s.write_string_with_format($r, $c, st, $align).map_err(|e| e.to_string())?; },
+                    Data::Bool(b) => { $s.write_boolean_with_format($r, $c, *b, $align).map_err(|e| e.to_string())?; },
+                    _ => { $s.write_string_with_format($r, $c, "-", $align).map_err(|e| e.to_string())?; },
+                }
+            }
         }
 
-        if sum_row > 1 {
-            let start_sum = rust_xlsxwriter::utility::row_col_to_cell(1, 1);
-            let end_sum = rust_xlsxwriter::utility::row_col_to_cell(sum_row - 1, 1);
-            summary_sheet.write_with_format(sum_row, 0, "الاجمالي الكلي (Grand Total)", &header_format).map_err(|e| e.to_string())?;
-            let final_formula = format!("=SUM({}:{})", start_sum, end_sum);
-            summary_sheet.write_formula_with_format(sum_row, 1, final_formula.as_str(), &header_format).map_err(|e| e.to_string())?;
-        }
+        write_data!(master_sheet, master_row, 0, &num_val, &center_string_format, &num_format);
+        master_sheet.write_string_with_format(master_row, 1, &pkg, &center_string_format).map_err(|e| e.to_string())?;
+        write_data!(master_sheet, master_row, 2, &desc_val, &string_format, &num_format);
+        write_data!(master_sheet, master_row, 3, &unit_val, &center_string_format, &num_format);
+        write_data!(master_sheet, master_row, 4, &qty_val, &num_format, &num_format);
+        write_data!(master_sheet, master_row, 5, &rate_val, &num_format, &num_format);
+
+        let mst_qty_cell = rust_xlsxwriter::utility::row_col_to_cell(master_row, 4);
+        let mst_rate_cell = rust_xlsxwriter::utility::row_col_to_cell(master_row, 5);
+        master_sheet.write_formula_with_format(master_row, 6, format!("={}*{}", mst_qty_cell, mst_rate_cell).as_str(), &num_format).map_err(|e| e.to_string())?;
+
+        master_row += 1;
     }
 
     let output_path = format!("{}_sliced.xlsx", file_path);

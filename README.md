@@ -2,6 +2,23 @@
 
 Tawreed is an AI-driven work package extraction application that processes construction Bill of Quantities (BOQ) spreadsheets, categorizes the items, and generates organized supplier packages in a newly reconstructed Excel workbook.
 
+### Features
+- **AI-Driven Extraction**: Automatically reads and comprehends construction BOQ spreadsheets.
+- **Supplier Categorization**: Intelligently groups items into organized supplier packages.
+- **Excel Reconstruction**: Generates a clean, newly reconstructed Excel workbook with the extracted data.
+- **Cross-Platform**: Available natively on Windows, macOS, and Linux.
+
+## Releases & Packages
+
+Pre-compiled, portable binaries for Tawreed are automatically built via our GitHub Actions CI/CD pipeline. 
+
+To download the latest fresh builds:
+1. Navigate to the [GitHub Releases](../../releases) tab of this repository.
+2. Download the appropriate package for your operating system:
+   - **Windows**: `.exe` or `.msi` installers.
+   - **macOS**: `.dmg` or `.app` packages.
+   - **Linux**: `.AppImage` or `.deb` packages.
+
 ## Prerequisites
 
 Before setting up and running Tawreed, ensure you have the following installed:
@@ -60,3 +77,7 @@ To run backend logic tests and verify the extractor core:
    ```bash
    cargo check --bin test_boq
    ```
+
+## Author & Credits
+
+Developed and maintained by [Kareem Safwat](https://kareemsafwat.com).

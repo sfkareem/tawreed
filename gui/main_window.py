@@ -43,9 +43,8 @@ class MainWindow(QMainWindow):
         self._nav_buttons: dict[str, QPushButton] = {}
         self._pages: dict[str, QWidget] = {}
         self._build_ui()
+        # _restore_window_state also selects the correct page.
         self._restore_window_state()
-        # Land on the Workspace by default.
-        self.select_page("workspace")
 
     # ----- UI construction ------------------------------------------------
 
@@ -167,22 +166,23 @@ class MainWindow(QMainWindow):
 
     def _restore_window_state(self) -> None:
         settings = QSettings("sfkareem", "Tawreed")
-        geometry = settings.value("window/geometry")
+        geometry = settings.value("geometry")
         if geometry is not None:
             self.restoreGeometry(geometry)
         else:
             self.resize(1100, 760)
-        # Last-visited page (default: workspace).
-        last = settings.value("window/last_page", "workspace")
+        # Last-visited page (default: workspace). Use select_page so the
+        # nav highlight and the page's refresh hook both fire.
+        last = settings.value("last_page", "workspace")
         if last in self._pages:
-            self._stack.setCurrentWidget(self._pages[last])
+            self.select_page(last)
 
     def closeEvent(self, event) -> None:
         settings = QSettings("sfkareem", "Tawreed")
-        settings.setValue("window/geometry", self.saveGeometry())
+        settings.setValue("geometry", self.saveGeometry())
         current = self._stack.currentWidget()
         for key, widget in self._pages.items():
             if widget is current:
-                settings.setValue("window/last_page", key)
+                settings.setValue("last_page", key)
                 break
         super().closeEvent(event)

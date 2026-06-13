@@ -29,6 +29,7 @@ from PySide6.QtWidgets import QApplication
 
 from core import db
 from core.logging_setup import setup_logging
+from core.i18n import get_i18n
 from gui.main_window import MainWindow
 from gui.single_app import SingleApplication
 from gui import splash as splash_mod
@@ -92,6 +93,17 @@ def _run() -> int:
     # Without this setWindowIcon call, Windows falls back to the
     # generic "unknown app" icon.
     app.setWindowIcon(QIcon(str(APP_ICON_PATH)))
+    # i18n: switch the application layout direction based on the
+    # active language. Arabic flips to RTL; everything else LTR.
+    # The i18n object also emits language_changed for any QObject
+    # that wants to retranslate itself on the fly.
+    i18n = get_i18n()
+    app.setLayoutDirection(Qt.RightToLeft if i18n.is_rtl() else Qt.LeftToRight)
+    i18n.language_changed.connect(
+        lambda _lang: app.setLayoutDirection(
+            Qt.RightToLeft if i18n.is_rtl() else Qt.LeftToRight
+        )
+    )
     if app.is_running():
         # Another instance owns the window — ask it to come forward
         # and exit. We don't even need to build a window ourselves.

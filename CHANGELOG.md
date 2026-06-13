@@ -5,7 +5,7 @@ All notable changes to Tawreed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - 2026-06-14
+## [0.0.1] - 2026-06-14
 
 ### Added
 - Initial public release of the Python/PySide6 rewrite.
@@ -35,5 +35,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `~/.tawreed/config.json` (plaintext). On shared machines, restrict
   access to that file. See `SECURITY.md` for the disclosure policy.
 
-[Unreleased]: https://github.com/sfkareem/tawreed/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/sfkareem/tawreed/releases/tag/v0.1.0
+[Unreleased]: https://github.com/sfkareem/tawreed/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/sfkareem/tawreed/releases/tag/v0.0.1

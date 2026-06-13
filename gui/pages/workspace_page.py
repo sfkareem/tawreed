@@ -14,6 +14,7 @@ Senior design choices:
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import subprocess
 import sys
@@ -30,6 +31,8 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from core import db
 from gui.worker import BOQProcessor, WorkerSignals
 from gui.widgets import Card, PageHeader, Section, StatusPill
+
+log = logging.getLogger(__name__)
 
 
 class _DropZone(QFrame):
@@ -279,7 +282,33 @@ class WorkspacePage(QWidget):
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-        loop.create_task(processor.process())
+        # add_done_callback is a safety net: if the task raises an
+        # exception that the Worker's own try/except doesn't catch
+        # (e.g. an asyncio.CancelledError leak, a bug in the qasync
+        # bridge), we still want the page to leave the "Processing…"
+        # state instead of staying stuck.
+        task = loop.create_task(processor.process())
+        task.add_done_callback(self._on_processor_done)
+
+    def _on_processor_done(self, task) -> None:
+        """Safety net for the BOQProcessor task.
+
+        Called when the asyncio task finishes (success, failure, or
+        cancellation). The normal paths route through
+        ``signals.finished`` or ``signals.error``; this handler
+        covers any exception that escapes those — without it, a
+        single leaked exception would leave the page stuck on
+        "Processing…" forever.
+        """
+        if task.cancelled():
+            log.warning("BOQProcessor task was cancelled")
+            return
+        exc = task.exception()
+        if exc is not None:
+            log.exception("BOQProcessor task raised unhandled exception")
+            # Re-use the same error path the Worker uses so the UI
+            # state stays consistent (status pill, log, etc.).
+            self.on_processing_error(f"{type(exc).__name__}: {exc}")
 
     def on_processing_finished(self, output_path: str) -> None:
         self.log(f"\n\n🎉 Processing complete!\nOutput saved to: {output_path}\n")

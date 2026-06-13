@@ -40,12 +40,18 @@ Output formatting (write_excel):
 import os
 import re
 import sys
+import errno
 import inspect
+import logging
+import zipfile
 import unicodedata
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.utils.exceptions import InvalidFileException
 from typing import Any, Tuple, Dict, List, Optional
+
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -282,8 +288,40 @@ def parse_excel(file_path: str) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
     is also kept under ``original_values`` with the same English
     keys plus lowercased aliases for compatibility with the legacy
     test_core.py.
+
+    Raises:
+        ValueError: if the file is not a valid Excel workbook
+            (corrupt zip, password-protected, wrong format, empty).
+        FileNotFoundError: if the path doesn't exist.
     """
-    wb = openpyxl.load_workbook(file_path, data_only=True)
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(
+            f"Excel file not found: {file_path}"
+        )
+    try:
+        wb = openpyxl.load_workbook(file_path, data_only=True)
+    except (InvalidFileException, zipfile.BadZipFile) as e:
+        # InvalidFileException = not a valid xlsx (could be .xls, .csv,
+        # a password-protected file, or random bytes renamed to .xlsx).
+        # BadZipFile = the file is corrupt or truncated.
+        log.exception("parse_excel: invalid Excel file %s", file_path)
+        raise ValueError(
+            f"'{os.path.basename(file_path)}' is not a valid Excel file. "
+            f"It may be password-protected, corrupt, or in an older format. "
+            f"Re-export it from Excel as .xlsx and try again. "
+            f"(Technical: {type(e).__name__}: {e})"
+        ) from e
+    except OSError as e:
+        # PermissionError, file locked by Excel, network share offline.
+        log.exception("parse_excel: OS error reading %s", file_path)
+        if e.errno == errno.EACCES or isinstance(e, PermissionError):
+            raise ValueError(
+                f"Cannot read '{os.path.basename(file_path)}' — "
+                f"the file is locked. Close it in Excel and try again."
+            ) from e
+        raise ValueError(
+            f"Cannot read '{os.path.basename(file_path)}': {e}"
+        ) from e
 
     markdown_parts: List[str] = []
     data_mapping: Dict[str, Any] = {}
@@ -730,8 +768,24 @@ def write_excel(
     _style_worksheet(ws_master, master_headers, master_rows, master_title, desc_idx=2)
 
     # ---- Save ------------------------------------------------------------
-    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-    wb.save(output_path)
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        wb.save(output_path)
+    except PermissionError as e:
+        # The most common cause: the user has the file open in Excel,
+        # which takes an exclusive write lock on Windows.
+        log.exception("write_excel: permission denied writing %s", output_path)
+        raise IOError(
+            f"Cannot write '{os.path.basename(output_path)}' — "
+            f"the file is open in Excel or another program has it locked. "
+            f"Close it and try again."
+        ) from e
+    except OSError as e:
+        # Disk full, path too long, network share offline, etc.
+        log.exception("write_excel: OS error writing %s", output_path)
+        raise IOError(
+            f"Cannot write '{os.path.basename(output_path)}': {e}"
+        ) from e
 
 
 def parse_excel_boq(file_path: str) -> tuple[str, dict, dict]:

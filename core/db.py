@@ -5,6 +5,8 @@ import sqlite3
 from datetime import datetime
 from typing import List, Dict, Any
 
+from core.ai import get_default_settings, is_valid_provider, get_provider_config
+
 # Root directory for Tawreed configurations and database
 if getattr(sys, 'frozen', False):
     local_app_data = os.environ.get("LOCALAPPDATA")
@@ -96,13 +98,10 @@ def add_history(project_name: str, packages_count: int, output_path: str) -> Non
             conn.close()
 
 def get_settings() -> Dict[str, Any]:
-    default_settings = {
-        "api_key": "",
-        "model_id": "MiniMax-M3",
-        "model": "MiniMax-M3",
-        "base_url": "https://api.minimax.io/v1",
-        "provider": "OpenAI"
-    }
+    default_settings = get_default_settings()
+    # Backwards-compat aliases: legacy code used `model_id` interchangeably
+    # with `model`. Keep both keys in sync at load time.
+    default_settings.setdefault("model_id", default_settings["model"])
     if not os.path.exists(CONFIG_PATH):
         return default_settings
     f = None
@@ -114,8 +113,13 @@ def get_settings() -> Dict[str, Any]:
             settings["model"] = settings["model_id"]
         elif "model" in settings and "model_id" not in settings:
             settings["model_id"] = settings["model"]
-            
-        # Ensure all keys exist, merge with defaults if any key is missing
+
+        # Migrate: if the stored provider is not one we recognise
+        # (e.g. user upgraded from an older build), fall back to the default.
+        if "provider" not in settings or not is_valid_provider(settings["provider"]):
+            settings["provider"] = default_settings["provider"]
+
+        # Ensure all default keys exist, merging in any missing values.
         for k, v in default_settings.items():
             if k not in settings:
                 settings[k] = v
@@ -127,15 +131,33 @@ def get_settings() -> Dict[str, Any]:
             f.close()
 
 def save_settings(settings: dict) -> None:
+    """Persist the settings dict. Validates and normalises the provider field."""
     # Ensure directory structure exists
     os.makedirs(TAWREED_DIR, exist_ok=True)
-    
+
+    # Validate the provider; if invalid, leave the previous value alone
+    # (the Settings UI is expected to send a valid name).
+    provider = settings.get("provider", "OpenAI")
+    if not is_valid_provider(provider):
+        provider = "OpenAI"
+    settings["provider"] = provider
+
+    # Auto-fill base_url and model from the provider config if the user
+    # left them blank or the values are clearly stale.
+    p = get_provider_config(provider)
+    if not settings.get("base_url"):
+        settings["base_url"] = p["base_url"]
+    if not settings.get("model"):
+        settings["model"] = p["default_model"]
+    if not settings.get("model_id"):
+        settings["model_id"] = settings["model"]
+
     # Ensure model and model_id are in sync
     if "model_id" in settings and "model" not in settings:
         settings["model"] = settings["model_id"]
     elif "model" in settings and "model_id" not in settings:
         settings["model_id"] = settings["model"]
-        
+
     f = None
     try:
         f = open(CONFIG_PATH, "w", encoding="utf-8")

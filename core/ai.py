@@ -7,22 +7,69 @@ from typing import List, Dict, Any, Tuple
 
 PROVIDERS = {
     "OpenAI": {
-        "base_url": "https://api.openai.com/v1",
-        "models": ["gpt-4o", "gpt-4o-mini", "o1"]
+        "base_url": "https://api.minimax.io/v1",
+        "models": ["MiniMax-M3", "gpt-4o", "gpt-4o-mini", "o1"],
+        "default_model": "MiniMax-M3",
+        "requires_base_url": True,
+        "transport": "openai",
+        "label": "OpenAI (custom base URL)"
     },
     "Google": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "models": ["gemini-1.5-pro", "gemini-1.5-flash"]
+        "models": ["gemini-1.5-pro", "gemini-1.5-flash"],
+        "default_model": "gemini-1.5-pro",
+        "requires_base_url": False,
+        "transport": "openai_compat",
+        "label": "Google Gemini"
     },
     "Claude": {
         "base_url": "https://api.anthropic.com/v1",
-        "models": ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"]
+        "models": ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
+        "default_model": "claude-3-5-sonnet-20241022",
+        "requires_base_url": False,
+        "transport": "native_anthropic",
+        "label": "Anthropic Claude"
     },
     "OpenAI Compatible": {
         "base_url": "",
-        "models": []
+        "models": [],
+        "default_model": "",
+        "requires_base_url": True,
+        "transport": "openai",
+        "label": "OpenAI-Compatible (custom)"
     }
 }
+
+
+def get_provider_names() -> list:
+    """Return the list of supported provider keys, in display order."""
+    return list(PROVIDERS.keys())
+
+
+def get_provider_config(name: str) -> dict:
+    """Return the full provider config for a given name.
+
+    Raises KeyError if the name is not a recognised provider. Callers
+    should validate user input via `is_valid_provider()` first.
+    """
+    return PROVIDERS[name]
+
+
+def is_valid_provider(name: str) -> bool:
+    """True if `name` is a key in the PROVIDERS dict."""
+    return name in PROVIDERS
+
+
+def get_default_settings() -> dict:
+    """Return a complete default settings dict using the default provider."""
+    default_provider = "OpenAI"
+    p = PROVIDERS[default_provider]
+    return {
+        "provider": default_provider,
+        "api_key": "",
+        "model": p["default_model"],
+        "base_url": p["base_url"],
+    }
 
 SYSTEM_PROMPT = """
 You are an expert Quantity Surveyor and Construction Estimator.

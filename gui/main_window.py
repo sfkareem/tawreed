@@ -1,231 +1,188 @@
+"""Main application shell.
+
+A QMainWindow with:
+- a fixed-width left rail (navigation buttons)
+- a QStackedWidget that swaps in the current page
+
+Pages live in ``gui/pages/``. To add a new page:
+1. Create ``gui/pages/<name>_page.py`` with a ``<Name>Page(QWidget)`` class.
+2. Import it below and register it in ``self._pages`` with a label.
+3. Add a button in ``_build_nav()``.
+"""
 import os
-import asyncio
+
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-    QPushButton, QLabel, QTextEdit, QFileDialog, QDialog, 
-    QLineEdit, QFormLayout, QMessageBox, QGraphicsDropShadowEffect
+    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+    QPushButton, QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizePolicy,
 )
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QSettings
 from PySide6.QtGui import QPixmap, QColor
 
-from core import db
-from gui.styles import MAIN_WINDOW_STYLE, SETTINGS_DIALOG_STYLE
-from gui.worker import BOQProcessor, WorkerSignals, check_connection
+from gui.styles import MAIN_WINDOW_STYLE
+from gui.pages.workspace_page import WorkspacePage
+from gui.pages.history_page import HistoryPage
+from gui.pages.settings_page import SettingsPage
+from gui.pages.about_page import AboutPage
 
-class SettingsDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("AI Settings")
-        self.setMinimumWidth(455)
-        self.setStyleSheet(SETTINGS_DIALOG_STYLE)
-        
-        self.layout = QFormLayout(self)
-        self.layout.setSpacing(12)
-        
-        self.base_url_input = QLineEdit()
-        self.model_input = QLineEdit()
-        self.api_key_input = QLineEdit()
-        self.api_key_input.setEchoMode(QLineEdit.Password)
-        
-        self.layout.addRow("Base URL:", self.base_url_input)
-        self.layout.addRow("Model ID:", self.model_input)
-        self.layout.addRow("API Key:", self.api_key_input)
-        
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(10)
-        
-        self.test_btn = QPushButton("Test Connection")
-        self.test_btn.clicked.connect(self.test_connection)
-        
-        self.save_btn = QPushButton("Save")
-        self.save_btn.setObjectName("saveBtn")
-        self.save_btn.clicked.connect(self.save_settings)
-        
-        btn_layout.addWidget(self.test_btn)
-        btn_layout.addStretch()
-        btn_layout.addWidget(self.save_btn)
-        
-        self.layout.addRow(btn_layout)
-        
-        self.load_settings()
-
-    def load_settings(self):
-        settings = db.get_settings()
-        self.api_key_input.setText(settings.get("api_key", ""))
-        self.model_input.setText(settings.get("model_id", "MiniMax-M3"))
-        self.base_url_input.setText(settings.get("base_url", "https://api.minimax.io/v1"))
-
-    def test_connection(self):
-        api_key = self.api_key_input.text()
-        base_url = self.base_url_input.text()
-        model_id = self.model_input.text()
-        
-        self.test_btn.setText("Testing...")
-        self.test_btn.setEnabled(False)
-        
-        loop = asyncio.get_event_loop()
-        task = loop.create_task(asyncio.to_thread(check_connection, api_key, base_url, model_id))
-        
-        def on_done(future):
-            self.test_btn.setText("Test Connection")
-            self.test_btn.setEnabled(True)
-            try:
-                success = future.result()
-                if success:
-                    QMessageBox.information(self, "Success", "Connection successful!")
-                else:
-                    QMessageBox.critical(self, "Error", "Connection failed. Check API key and URL.")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Connection test error: {e}")
-                
-        task.add_done_callback(on_done)
-
-    def save_settings(self):
-        settings = {
-            "api_key": self.api_key_input.text(),
-            "model_id": self.model_input.text(),
-            "base_url": self.base_url_input.text()
-        }
-        db.save_settings(settings)
-        self.accept()
 
 class MainWindow(QMainWindow):
+    """Top-level shell. Holds nav + page stack; no business logic."""
+
+    NAV_ITEMS = [
+        ("workspace", "Workspace"),
+        ("history", "History"),
+        ("settings", "Settings"),
+        ("about", "About"),
+    ]
+
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Tawreed - AI BOQ Processing")
-        self.resize(1000, 700)
+        self.setWindowTitle("Tawreed — AI BOQ Processing")
         self.setStyleSheet(MAIN_WINDOW_STYLE)
-        
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(20)
-        
-        # Sidebar
-        sidebar = QWidget()
-        sidebar.setFixedWidth(240)
-        sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(0, 0, 0, 0)
-        
+
+        self._nav_buttons: dict[str, QPushButton] = {}
+        self._pages: dict[str, QWidget] = {}
+        self._build_ui()
+        self._restore_window_state()
+        # Land on the Workspace by default.
+        self.select_page("workspace")
+
+    # ----- UI construction ------------------------------------------------
+
+    def _build_ui(self) -> None:
+        root = QWidget()
+        self.setCentralWidget(root)
+        root_layout = QHBoxLayout(root)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        root_layout.addWidget(self._build_nav())
+        root_layout.addWidget(self._build_page_stack(), stretch=1)
+
+    def _build_nav(self) -> QWidget:
+        rail = QWidget()
+        rail.setObjectName("navRail")
+        rail.setFixedWidth(220)
+        rail.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+
+        rail_layout = QVBoxLayout(rail)
+        rail_layout.setContentsMargins(16, 24, 16, 24)
+        rail_layout.setSpacing(8)
+
+        # Brand block
+        brand = QWidget()
+        brand_layout = QVBoxLayout(brand)
+        brand_layout.setContentsMargins(0, 0, 0, 16)
+        brand_layout.setSpacing(6)
+
         logo_label = QLabel()
-        logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tawreed_logo_transparent.png")
+        logo_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "tawreed_logo_transparent.png"
+        )
         if os.path.exists(logo_path):
-            pixmap = QPixmap(logo_path).scaled(180, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            pixmap = QPixmap(logo_path).scaled(
+                96, 96, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
             logo_label.setPixmap(pixmap)
-            logo_label.setAlignment(Qt.AlignCenter)
         else:
             logo_label.setText("TAWREED")
-            logo_label.setStyleSheet("font-size: 26px; color: #89b4fa; font-weight: bold; padding: 20px;")
-            logo_label.setAlignment(Qt.AlignCenter)
-            
-        settings_btn = QPushButton("⚙ Settings")
-        settings_btn.clicked.connect(self.open_settings)
-        
-        sidebar_layout.addWidget(logo_label)
-        sidebar_layout.addStretch()
-        sidebar_layout.addWidget(settings_btn)
-        
-        # Content panel
-        content_panel = QWidget()
-        content_panel.setObjectName("mainContainer")
-        
+            logo_label.setObjectName("navBrandFallback")
+        logo_label.setAlignment(Qt.AlignCenter)
+        brand_layout.addWidget(logo_label)
+
+        app_label = QLabel("Tawreed")
+        app_label.setObjectName("navBrand")
+        app_label.setAlignment(Qt.AlignCenter)
+        brand_layout.addWidget(app_label)
+
+        rail_layout.addWidget(brand)
+
+        # Page stack — registered up here so the nav buttons can target it.
+        # (The actual QStackedWidget is built in _build_page_stack; we just
+        # create a reference to it via self._stack from the caller.)
+        rail_layout.addSpacing(8)
+        for key, label in self.NAV_ITEMS:
+            btn = QPushButton(label)
+            btn.setObjectName("navButton")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _checked=False, k=key: self.select_page(k))
+            self._nav_buttons[key] = btn
+            rail_layout.addWidget(btn)
+
+        rail_layout.addStretch(1)
+
+        footer = QLabel("v0.1.0")
+        footer.setObjectName("navFooter")
+        footer.setAlignment(Qt.AlignCenter)
+        rail_layout.addWidget(footer)
+
+        return rail
+
+    def _build_page_stack(self) -> QWidget:
+        container = QWidget()
+        container.setObjectName("mainContainer")
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(28, 28, 28, 28)
+        container_layout.setSpacing(0)
+
         shadow = QGraphicsDropShadowEffect()
         shadow.setBlurRadius(24)
         shadow.setColor(QColor(0, 0, 0, 110))
         shadow.setOffset(0, 6)
-        content_panel.setGraphicsEffect(shadow)
-        
-        content_layout = QVBoxLayout(content_panel)
-        content_layout.setContentsMargins(30, 30, 30, 30)
-        content_layout.setSpacing(15)
-        
-        title = QLabel("BOQ Processor")
-        title.setObjectName("titleLabel")
-        
-        controls_layout = QHBoxLayout()
-        controls_layout.setSpacing(15)
-        
-        self.file_label = QLabel("No file selected")
-        self.file_label.setStyleSheet("color: #a6adc8; font-size: 13px;")
-        
-        select_btn = QPushButton("Browse BOQ...")
-        select_btn.clicked.connect(self.browse_file)
-        
-        self.process_btn = QPushButton("Start Processing")
-        self.process_btn.setObjectName("primaryBtn")
-        self.process_btn.clicked.connect(self.start_processing)
-        self.process_btn.setEnabled(False)
-        
-        controls_layout.addWidget(select_btn)
-        controls_layout.addWidget(self.file_label)
-        controls_layout.addStretch()
-        controls_layout.addWidget(self.process_btn)
-        
-        console_label = QLabel("Live Console")
-        console_label.setStyleSheet("color: #cdd6f4; font-weight: bold; font-size: 14px; margin-top: 10px;")
-        
-        self.console = QTextEdit()
-        self.console.setReadOnly(True)
-        
-        content_layout.addWidget(title)
-        content_layout.addSpacing(10)
-        content_layout.addLayout(controls_layout)
-        content_layout.addWidget(console_label)
-        content_layout.addWidget(self.console)
-        
-        main_layout.addWidget(sidebar)
-        main_layout.addWidget(content_panel, stretch=1)
-        
-        self.selected_file = None
+        container.setGraphicsEffect(shadow)
 
-    def open_settings(self):
-        dlg = SettingsDialog(self)
-        dlg.exec()
+        self._stack = QStackedWidget(container)
+        container_layout.addWidget(self._stack)
 
-    def browse_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select BOQ Excel File", "", "Excel Files (*.xlsx *.xls)"
-        )
-        if file_path:
-            self.selected_file = file_path
-            self.file_label.setText(os.path.basename(file_path))
-            self.process_btn.setEnabled(True)
+        # Register pages
+        self._pages["workspace"] = WorkspacePage()
+        self._pages["history"] = HistoryPage()
+        self._pages["settings"] = SettingsPage()
+        self._pages["about"] = AboutPage()
+        for key, widget in self._pages.items():
+            self._stack.addWidget(widget)
 
-    def log(self, text):
-        self.console.insertPlainText(text)
-        scrollbar = self.console.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        return container
 
-    def start_processing(self):
-        if not self.selected_file:
+    # ----- Page switching -------------------------------------------------
+
+    def select_page(self, key: str) -> None:
+        if key not in self._pages:
             return
-            
-        settings = db.get_settings()
-        if not settings or not settings.get('api_key'):
-            QMessageBox.warning(self, "Settings Required", "Please configure an API key in settings first.")
-            return
+        self._stack.setCurrentWidget(self._pages[key])
+        for k, btn in self._nav_buttons.items():
+            btn.setChecked(k == key)
+        # If the page exposes a refresh hook (History page does), call it.
+        refresh = getattr(self._pages[key], "refresh", None)
+        if callable(refresh):
+            try:
+                refresh()
+            except Exception:
+                # Don't let a refresh failure prevent navigation; the page
+                # itself is responsible for surfacing the error in its UI.
+                pass
 
-        self.process_btn.setEnabled(False)
-        self.console.clear()
-        self.log("Initializing processor...\n")
-        
-        self.signals = WorkerSignals()
-        self.signals.log.connect(self.log)
-        self.signals.finished.connect(self.on_processing_finished)
-        self.signals.error.connect(self.on_processing_error)
-        
-        processor = BOQProcessor(self.selected_file, self.signals)
-        
-        loop = asyncio.get_event_loop()
-        loop.create_task(processor.process())
+    # ----- Window state persistence --------------------------------------
 
-    def on_processing_finished(self, output_path):
-        self.log(f"\n\n🎉 Processing complete!\nOutput saved to: {output_path}\n")
-        self.process_btn.setEnabled(True)
-        QMessageBox.information(self, "Complete", f"Successfully generated Work Packages!\nSaved to:\n{output_path}")
+    def _restore_window_state(self) -> None:
+        settings = QSettings("sfkareem", "Tawreed")
+        geometry = settings.value("window/geometry")
+        if geometry is not None:
+            self.restoreGeometry(geometry)
+        else:
+            self.resize(1100, 760)
+        # Last-visited page (default: workspace).
+        last = settings.value("window/last_page", "workspace")
+        if last in self._pages:
+            self._stack.setCurrentWidget(self._pages[last])
 
-    def on_processing_error(self, error_msg):
-        self.log(f"\n\n❌ Error during processing:\n{error_msg}\n")
-        self.process_btn.setEnabled(True)
-        QMessageBox.critical(self, "Error", f"Failed to process BOQ:\n{error_msg}")
+    def closeEvent(self, event) -> None:
+        settings = QSettings("sfkareem", "Tawreed")
+        settings.setValue("window/geometry", self.saveGeometry())
+        current = self._stack.currentWidget()
+        for key, widget in self._pages.items():
+            if widget is current:
+                settings.setValue("window/last_page", key)
+                break
+        super().closeEvent(event)

@@ -11,6 +11,11 @@ try:
     print("Worker imports: OK")
     from gui.main_window import MainWindow
     print("MainWindow imports: OK")
+    from gui.pages.workspace_page import WorkspacePage
+    from gui.pages.history_page import HistoryPage
+    from gui.pages.settings_page import SettingsPage
+    from gui.pages.about_page import AboutPage
+    print("Page imports: OK")
     import main
     print("Main module import: OK")
     print("All imports verified successfully!")

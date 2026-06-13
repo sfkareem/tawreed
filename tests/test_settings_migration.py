@@ -1,0 +1,260 @@
+"""Tests for the settings migration in core.db.get_settings().
+
+When the provider list changes (e.g. PR #5 promoted the old
+"OpenAI" + custom-base-url pattern to "OpenAI Compatible"), users
+who already have a config.json on disk shouldn't have to manually
+re-enter their settings. ``get_settings()`` detects the legacy
+shape and rewrites it transparently.
+
+The state tree is now at ``~/.tawreed`` for both dev and frozen
+builds (was previously split between %LOCALAPPDATA%, the project
+root, and ~/.tawreed). These tests override ``os.path.expanduser``
+so they don't pollute the real home directory.
+"""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+import pytest
+
+import core.db as db
+from core.ai import PROVIDERS
+
+
+@pytest.fixture
+def isolated_config(tmp_path, monkeypatch):
+    """Point core.db at a tmp dir + a writable config.json path.
+
+    The new policy is ``~/.tawreed`` for everything, so we redirect
+    ``os.path.expanduser('~')`` to ``tmp_path`` and the state
+    ends up at ``<tmp>/.tawreed/...``.
+    """
+    monkeypatch.setattr(os.path, "expanduser", lambda p: str(tmp_path) if p == "~" else p)
+    # Reload so module-level path constants pick up the new home.
+    import importlib
+    importlib.reload(db)
+    # Make sure the new tree exists so tests can write into it.
+    db.init_db()
+    return tmp_path / ".tawreed"
+
+
+def _write_config(p: Path, payload: dict) -> None:
+    p.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_legacy_minimax_openai_promotes_to_compatible(isolated_config):
+    """User had provider=OpenAI, base_url=https://api.minimax.io/v1.
+    After upgrade, the provider should auto-become 'OpenAI Compatible'
+    and the base_url should be preserved."""
+    _write_config(Path(db.CONFIG_PATH), {
+        "provider": "OpenAI",
+        "base_url": "https://api.minimax.io/v1",
+        "api_key": "sk-test-123",
+        "model": "MiniMax-M3",
+    })
+    s = db.get_settings()
+    assert s["provider"] == "OpenAI Compatible"
+    assert s["base_url"] == "https://api.minimax.io/v1"
+    assert s["api_key"] == "sk-test-123"
+    assert s["model"] == "MiniMax-M3"
+
+
+def test_legitimate_openai_url_does_not_promote(isolated_config):
+    """User has provider=OpenAI, base_url=api.openai.com. That's
+    the canonical OpenAI case — should stay as 'OpenAI'."""
+    _write_config(Path(db.CONFIG_PATH), {
+        "provider": "OpenAI",
+        "base_url": "https://api.openai.com/v1",
+        "api_key": "sk-real",
+        "model": "gpt-4.1",
+    })
+    s = db.get_settings()
+    assert s["provider"] == "OpenAI"
+    assert s["base_url"] == "https://api.openai.com/v1"
+
+
+def test_other_custom_url_promotes_to_compatible(isolated_config):
+    """User has provider=OpenAI, base_url=anything-not-openai. Promotes."""
+    for url in [
+        "https://api.groq.com/openai/v1",
+        "http://localhost:1234/v1",
+        "https://api.together.xyz/v1",
+    ]:
+        _write_config(Path(db.CONFIG_PATH), {
+            "provider": "OpenAI", "base_url": url,
+            "api_key": "x", "model": "y",
+        })
+        s = db.get_settings()
+        assert s["provider"] == "OpenAI Compatible", f"failed for {url}"
+        assert s["base_url"] == url
+
+
+def test_empty_base_url_does_not_promote(isolated_config):
+    """OpenAI now defaults to api.openai.com — an empty base_url
+    should stay as 'OpenAI' (the empty string isn't a custom proxy)."""
+    _write_config(Path(db.CONFIG_PATH), {
+        "provider": "OpenAI",
+        "base_url": "",
+        "api_key": "sk-x",
+        "model": "gpt-4.1",
+    })
+    s = db.get_settings()
+    assert s["provider"] == "OpenAI"
+
+
+def test_unknown_provider_falls_back_to_default(isolated_config):
+    """If the saved provider is not in PROVIDERS at all, fall back
+    to the default rather than crashing."""
+    _write_config(Path(db.CONFIG_PATH), {
+        "provider": "NotARealProvider",
+        "base_url": "https://x",
+        "api_key": "",
+        "model": "x",
+    })
+    s = db.get_settings()
+    assert s["provider"] in PROVIDERS
+    assert s["provider"] == "OpenAI"
+
+
+def test_corrupt_config_returns_defaults(isolated_config):
+    """A non-JSON config.json must not crash the app."""
+    Path(db.CONFIG_PATH).write_text("not json at all", encoding="utf-8")
+    s = db.get_settings()
+    assert s["provider"] in PROVIDERS
+    assert s["api_key"] == ""  # never default-fill an API key
+
+
+# ---------------------------------------------------------------------------
+# One-shot migration of legacy state into ~/.tawreed
+# ---------------------------------------------------------------------------
+
+
+def test_migrate_legacy_localappdata(monkeypatch, tmp_path):
+    """If the user had state at ``%LOCALAPPDATA%\\Tawreed`` (the old
+    frozen-build layout), init_db() should copy config + db + outputs
+    into the new ``~/.tawreed/`` tree."""
+    import sqlite3
+    legacy = tmp_path / "fake_localappdata" / "Tawreed"
+    legacy.mkdir(parents=True)
+    (legacy / "config.json").write_text(
+        '{"provider": "OpenAI", "base_url": "https://api.minimax.io/v1", '
+        '"api_key": "sk-legacy", "model": "MiniMax-M3"}',
+        encoding="utf-8",
+    )
+    legacy_db = legacy / "db"
+    legacy_db.mkdir()
+    real_db = legacy_db / "tawreed.db"
+    conn = sqlite3.connect(str(real_db))
+    conn.execute("CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY)")
+    conn.commit()
+    conn.close()
+    legacy_out = legacy / "outputs"
+    legacy_out.mkdir()
+    (legacy_out / "old_run.xlsx").write_bytes(b"fake-xlsx")
+
+    # Pretend %LOCALAPPDATA% points at our tmp dir.
+    monkeypatch.setattr(os.environ, "get", lambda k, d=None: str(legacy.parent) if k == "LOCALAPPDATA" else os.environ.get(k, d))
+    # Pretend the user's home is the new tawreed dir.
+    new_home = tmp_path / "fake_home"
+    new_home.mkdir()
+    monkeypatch.setattr(os.path, "expanduser", lambda p: str(new_home) if p == "~" else p)
+
+    # Reload db so its module-level constants re-evaluate.
+    import importlib
+    importlib.reload(db)
+    db.init_db()
+
+    # All three things should be in ~/.tawreed now.
+    new_tawreed = new_home / ".tawreed"
+    assert (new_tawreed / "config.json").exists()
+    assert (new_tawreed / "db" / "tawreed.db").exists()
+    assert (new_tawreed / "outputs" / "old_run.xlsx").exists()
+    # A breadcrumb migration log was written.
+    assert (new_tawreed / "logs" / "migration.log").exists()
+
+
+def test_migrate_legacy_exe_dir(monkeypatch, tmp_path):
+    """If the user had state at ``<exe-dir>/tawreed`` (the broken
+    v0.0.1 frozen-build behaviour), init_db() should copy it into
+    ``~/.tawreed/`` and then remove the now-empty legacy tree."""
+    import sqlite3
+    import sys
+    legacy = tmp_path / "dist" / "Tawreed" / "tawreed"
+    legacy.mkdir(parents=True)
+    (legacy / "config.json").write_text(
+        '{"provider": "OpenAI", "api_key": "sk-legacy", "model": "gpt-4.1"}',
+        encoding="utf-8",
+    )
+    legacy_db = legacy / "db"
+    legacy_db.mkdir()
+    real_db = legacy_db / "tawreed.db"
+    conn = sqlite3.connect(str(real_db))
+    conn.execute("CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY)")
+    conn.commit()
+    conn.close()
+
+    fake_exe = legacy.parent / "Tawreed.exe"
+    fake_exe.write_text("")
+
+    new_home = tmp_path / "fake_home2"
+    new_home.mkdir()
+    monkeypatch.setattr(os.path, "expanduser", lambda p: str(new_home) if p == "~" else p)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(fake_exe), raising=False)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+
+    import importlib
+    importlib.reload(db)
+    db.init_db()
+
+    new_tawreed = new_home / ".tawreed"
+    assert (new_tawreed / "config.json").exists()
+    assert (new_tawreed / "db" / "tawreed.db").exists()
+    # The legacy <exe-dir>/tawreed tree was cleaned up.
+    assert not legacy.exists(), (
+        f"Legacy tree at {legacy} was not removed — should be cleaned after migration"
+    )
+
+
+def test_migrate_skips_when_no_legacy(monkeypatch, tmp_path):
+    """If there's no legacy state, init_db() just creates the new
+    tree without writing a migration log."""
+    new_home = tmp_path / "fresh_home"
+    new_home.mkdir()
+    monkeypatch.setattr(os.path, "expanduser", lambda p: str(new_home) if p == "~" else p)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+
+    import importlib
+    importlib.reload(db)
+    db.init_db()
+
+    new_tawreed = new_home / ".tawreed"
+    assert new_tawreed.exists()
+    # No breadcrumb when there was nothing to migrate.
+    assert not (new_tawreed / "logs" / "migration.log").exists()
+
+
+def test_migrate_does_not_overwrite_existing(monkeypatch, tmp_path):
+    """If ~/.tawreed/ already has a config.json, the legacy file
+    is NOT copied over — the user's current settings win."""
+    import sys
+    legacy = tmp_path / "fake_localappdata" / "Tawreed"
+    legacy.mkdir(parents=True)
+    (legacy / "config.json").write_text('{"api_key": "OLD"}', encoding="utf-8")
+
+    new_home = tmp_path / "fresh_home2"
+    new_tawreed = new_home / ".tawreed"
+    new_tawreed.mkdir(parents=True)
+    (new_tawreed / "config.json").write_text('{"api_key": "NEW"}', encoding="utf-8")
+
+    monkeypatch.setattr(os.path, "expanduser", lambda p: str(new_home) if p == "~" else p)
+    monkeypatch.setattr(os.environ, "get", lambda k, d=None: str(legacy.parent) if k == "LOCALAPPDATA" else os.environ.get(k, d))
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+
+    import importlib
+    importlib.reload(db)
+    db.init_db()
+    # The new file is untouched.
+    assert '"api_key": "NEW"' in (new_tawreed / "config.json").read_text(encoding="utf-8")

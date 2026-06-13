@@ -1,29 +1,36 @@
-"""Application stylesheet.
+"""Style tokens and stylesheet loader.
 
-Token-based QSS — every colour, spacing, radius, and font size is a
-named value here, not magic numbers in widget code. To retheme the
-app, change a token in this file only.
+The QSS lives in ``gui/themes/tawreed_dark.qss`` (loaded at runtime by
+``load_stylesheet()``); the Python constants here are the *single source
+of truth* for every color / radius / type value. The ``.qss`` file uses
+``@token`` placeholders that are substituted at load time.
 
-Object names referenced (set via setObjectName):
-- QWidget#navRail           — left navigation rail
-- QPushButton#navButton     — nav button (default + checked states)
-- QLabel#navBrand / #navBrandFallback / #navFooter
-- QWidget#mainContainer     — page content card with shadow
-- QLabel#titleLabel         — page titles
-- QLabel#sectionLabel       — page subtitles / console header
-- QLabel#statusLabel        — page status / footer text
-- QLabel#metaLabel / #metaValue
-- QLabel#aboutBody
-- QLabel#fileLabel
-- QTextEdit#liveConsole
-- QPushButton#primaryBtn    — main action button (Start / Save)
+Adding a new token:
+    1. Add the constant below.
+    2. Reference it as ``@my-token`` in the .qss file.
+    3. Add it to ``_TOKEN_MAP`` for substitution.
+
+Re-theming:
+    Change a constant here. That's it. No .qss edits required for
+    recolor, re-space, re-type. Only when adding new selectors.
+
+Legacy alias:
+    ``MAIN_WINDOW_STYLE`` and ``SETTINGS_DIALOG_STYLE`` are kept as
+    module-level strings so any third-party widget that imports them
+    during the deprecation window still works. Both are loaded once at
+    import time.
 """
+from __future__ import annotations
+
+import os
+from functools import lru_cache
 
 
 # ----- Colour tokens (Catppuccin Mocha-ish, dark) -----
-COLOR_BG = "#0d0e15"               # main window background
-COLOR_BG_RAIL = "#0a0b12"          # nav rail background
-COLOR_BG_CARD = "rgba(20, 21, 33, 0.7)"  # main content card
+COLOR_BG = "#0d0e15"                       # main window background
+COLOR_BG_RAIL = "#0a0b12"                  # nav rail background
+COLOR_BG_CARD = "rgba(20, 21, 33, 0.55)"   # main content card surface (translucent)
+COLOR_BG_CARD_ELEV = "rgba(28, 30, 46, 0.7)"  # raised card surface (Card widget)
 COLOR_BG_INPUT = "rgba(255, 255, 255, 0.05)"
 COLOR_BG_INPUT_FOCUS = "rgba(255, 255, 255, 0.08)"
 
@@ -34,14 +41,19 @@ COLOR_BORDER_INPUT_FOCUS = "#89b4fa"
 COLOR_TEXT = "#e2e4f3"
 COLOR_TEXT_DIM = "#a6adc8"
 COLOR_TEXT_MUTED = "#7f849c"
-COLOR_TEXT_PRIMARY = "#0d0e15"     # text on top of primary buttons
+COLOR_TEXT_PRIMARY = "#0d0e15"            # text on top of primary buttons
 
-COLOR_ACCENT = "#89b4fa"           # primary blue
+COLOR_ACCENT = "#89b4fa"                   # primary blue
 COLOR_ACCENT_HOVER = "#b4befe"
 COLOR_ACCENT_TRANS = "rgba(137, 180, 250, 0.08)"
 COLOR_ACCENT_TRANS_HOVER = "rgba(137, 180, 250, 0.18)"
 COLOR_ACCENT_TRANS_BORDER = "rgba(137, 180, 250, 0.3)"
 COLOR_ACCENT_TRANS_BORDER_HOVER = "rgba(137, 180, 250, 0.5)"
+
+# Semantic status colours (Catppuccin Mocha).
+COLOR_SUCCESS = "#a6e3a1"                  # green
+COLOR_WARNING = "#f9e2af"                  # yellow
+COLOR_ERROR = "#f38ba8"                    # red/pink
 
 # Spacing
 RADIUS_SM = 6
@@ -54,228 +66,80 @@ TYPE_MONO = "'Consolas', 'Courier New', monospace"
 TYPE_SANS = "'Segoe UI', 'Inter', system-ui, sans-serif"
 
 
-def _build() -> str:
-    return f"""
-    /* ---- Base ---- */
-    QMainWindow {{
-        background-color: {COLOR_BG};
-    }}
-    QWidget {{
-        color: {COLOR_TEXT};
-        font-size: 13px;
-    }}
+# ----- Theme file location -----
 
-    /* ---- Navigation rail ---- */
-    QWidget#navRail {{
-        background-color: {COLOR_BG_RAIL};
-        border-right: 1px solid {COLOR_BORDER};
-    }}
-    QLabel#navBrand {{
-        color: {COLOR_TEXT};
-        font-size: 18px;
-        font-weight: bold;
-        letter-spacing: 0.5px;
-    }}
-    QLabel#navBrandFallback {{
-        color: {COLOR_ACCENT};
-        font-size: 22px;
-        font-weight: bold;
-        padding: 20px;
-    }}
-    QLabel#navFooter {{
-        color: {COLOR_TEXT_MUTED};
-        font-size: 11px;
-        padding-top: 8px;
-    }}
-    QPushButton#navButton {{
-        background-color: transparent;
-        color: {COLOR_TEXT_DIM};
-        border: 1px solid transparent;
-        border-radius: {RADIUS_MD};
-        padding: 10px 14px;
-        text-align: left;
-        font-size: 13px;
-        font-weight: 500;
-    }}
-    QPushButton#navButton:hover {{
-        background-color: {COLOR_ACCENT_TRANS};
-        color: {COLOR_TEXT};
-        border: 1px solid {COLOR_ACCENT_TRANS_BORDER};
-    }}
-    QPushButton#navButton:checked {{
-        background-color: {COLOR_ACCENT_TRANS_HOVER};
-        color: {COLOR_ACCENT};
-        border: 1px solid {COLOR_ACCENT};
-        font-weight: 600;
-    }}
+_THEMES_DIR = os.path.join(os.path.dirname(__file__), "themes")
+_DARK_THEME_PATH = os.path.join(_THEMES_DIR, "tawreed_dark.qss")
 
-    /* ---- Page content card ---- */
-    QWidget#mainContainer {{
-        background-color: {COLOR_BG_CARD};
-        border: 1px solid {COLOR_BORDER};
-        border-radius: {RADIUS_XL};
-    }}
 
-    /* ---- Type roles ---- */
-    QLabel#titleLabel {{
-        color: #ffffff;
-        font-size: 24px;
-        font-weight: bold;
-        letter-spacing: 0.3px;
-    }}
-    QLabel#sectionLabel {{
-        color: {COLOR_TEXT_DIM};
-        font-weight: 500;
-        font-size: 13px;
-    }}
-    QLabel#statusLabel {{
-        color: {COLOR_TEXT_MUTED};
-        font-size: 12px;
-    }}
-    QLabel#metaLabel {{
-        color: {COLOR_TEXT_MUTED};
-        font-size: 12px;
-        font-weight: bold;
-    }}
-    QLabel#metaValue {{
-        color: {COLOR_TEXT};
-        font-size: 13px;
-    }}
-    QLabel#aboutBody {{
-        color: {COLOR_TEXT_DIM};
-        font-size: 13px;
-        line-height: 1.5;
-    }}
-    QLabel#fileLabel {{
-        color: {COLOR_TEXT_DIM};
-        font-size: 13px;
-    }}
+# ----- Token substitution map -----
+#
+# Maps the @-token names used in tawreed_dark.qss to the Python constants
+# above. Hyphens in CSS become underscores when looked up here.
+_TOKEN_MAP = {
+    "color-bg": COLOR_BG,
+    "color-bg-rail": COLOR_BG_RAIL,
+    "color-bg-card": COLOR_BG_CARD,
+    "color-bg-card-elev": COLOR_BG_CARD_ELEV,
+    "color-bg-input": COLOR_BG_INPUT,
+    "color-bg-input-focus": COLOR_BG_INPUT_FOCUS,
+    "color-border": COLOR_BORDER,
+    "color-border-input": COLOR_BORDER_INPUT,
+    "color-border-input-focus": COLOR_BORDER_INPUT_FOCUS,
+    "color-text": COLOR_TEXT,
+    "color-text-dim": COLOR_TEXT_DIM,
+    "color-text-muted": COLOR_TEXT_MUTED,
+    "color-text-primary": COLOR_TEXT_PRIMARY,
+    "color-accent": COLOR_ACCENT,
+    "color-accent-hover": COLOR_ACCENT_HOVER,
+    "color-accent-trans": COLOR_ACCENT_TRANS,
+    "color-accent-trans-hover": COLOR_ACCENT_TRANS_HOVER,
+    "color-accent-trans-border": COLOR_ACCENT_TRANS_BORDER,
+    "color-accent-trans-border-hover": COLOR_ACCENT_TRANS_BORDER_HOVER,
+    "color-success": COLOR_SUCCESS,
+    "color-warning": COLOR_WARNING,
+    "color-error": COLOR_ERROR,
+    "radius-sm": str(RADIUS_SM),
+    "radius-md": str(RADIUS_MD),
+    "radius-lg": str(RADIUS_LG),
+    "radius-xl": str(RADIUS_XL),
+    "type-mono": TYPE_MONO,
+}
 
-    /* ---- Inputs ---- */
-    QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QPlainTextEdit {{
-        background-color: {COLOR_BG_INPUT};
-        color: #ffffff;
-        border: 1px solid {COLOR_BORDER_INPUT};
-        border-radius: {RADIUS_SM};
-        padding: 8px;
-        font-size: 13px;
-        selection-background-color: {COLOR_ACCENT};
-    }}
-    QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QPlainTextEdit:focus {{
-        border: 1px solid {COLOR_BORDER_INPUT_FOCUS};
-        background-color: {COLOR_BG_INPUT_FOCUS};
-    }}
-    QComboBox::drop-down {{
-        border: none;
-        width: 22px;
-    }}
-    QComboBox QAbstractItemView {{
-        background-color: #131420;
-        color: {COLOR_TEXT};
-        border: 1px solid {COLOR_BORDER};
-        selection-background-color: {COLOR_ACCENT_TRANS_HOVER};
-        selection-color: {COLOR_ACCENT};
-        outline: 0;
-    }}
 
-    /* ---- Live console ---- */
-    QTextEdit#liveConsole {{
-        background-color: rgba(10, 11, 18, 0.6);
-        color: {COLOR_TEXT};
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: {RADIUS_LG};
-        padding: 12px;
-        font-family: {TYPE_MONO};
-        font-size: 13px;
-    }}
+@lru_cache(maxsize=4)
+def load_stylesheet(theme: str = "dark") -> str:
+    """Load the requested theme's QSS with tokens substituted in.
 
-    /* ---- Tables ---- */
-    QTableWidget {{
-        background-color: rgba(10, 11, 18, 0.45);
-        alternate-background-color: rgba(255, 255, 255, 0.02);
-        gridline-color: {COLOR_BORDER};
-        border: 1px solid {COLOR_BORDER};
-        border-radius: {RADIUS_MD};
-    }}
-    QTableWidget::item {{
-        padding: 6px 8px;
-    }}
-    QHeaderView::section {{
-        background-color: {COLOR_BG_INPUT};
-        color: {COLOR_TEXT_DIM};
-        padding: 8px;
-        border: none;
-        border-bottom: 1px solid {COLOR_BORDER};
-        font-weight: 600;
-    }}
+    ``theme`` is the bare name of the .qss file in ``gui/themes/``
+    (without extension). Currently only ``"dark"`` is shipped; the
+    hook is here for a future ``tawreed_light.qss``.
 
-    /* ---- Buttons ---- */
-    QPushButton {{
-        background-color: {COLOR_ACCENT_TRANS};
-        color: {COLOR_ACCENT};
-        border: 1px solid {COLOR_ACCENT_TRANS_BORDER};
-        border-radius: {RADIUS_MD};
-        padding: 9px 18px;
-        font-weight: 600;
-        font-size: 13px;
-    }}
-    QPushButton:hover {{
-        background-color: {COLOR_ACCENT_TRANS_HOVER};
-        border: 1px solid {COLOR_ACCENT_TRANS_BORDER_HOVER};
-    }}
-    QPushButton:disabled {{
-        background-color: {COLOR_ACCENT_TRANS};
-        color: {COLOR_TEXT_MUTED};
-        border: 1px solid {COLOR_BORDER};
-    }}
-    QPushButton#primaryBtn {{
-        background-color: {COLOR_ACCENT};
-        color: {COLOR_TEXT_PRIMARY};
-        border: none;
-    }}
-    QPushButton#primaryBtn:hover {{
-        background-color: {COLOR_ACCENT_HOVER};
-    }}
-    QPushButton#primaryBtn:disabled {{
-        background-color: {COLOR_ACCENT_TRANS_HOVER};
-        color: rgba(13, 14, 21, 0.6);
-    }}
-
-    /* ---- Scrollbar ---- */
-    QScrollBar:vertical {{
-        border: none;
-        background: rgba(255, 255, 255, 0.02);
-        width: 8px;
-        margin: 0px;
-        border-radius: 4px;
-    }}
-    QScrollBar::handle:vertical {{
-        background: rgba(137, 180, 250, 0.4);
-        min-height: 20px;
-        border-radius: 4px;
-    }}
-    QScrollBar::handle:vertical:hover {{
-        background: rgba(137, 180, 250, 0.7);
-    }}
-    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-        height: 0px;
-    }}
-    QScrollBar:horizontal {{
-        border: none;
-        background: rgba(255, 255, 255, 0.02);
-        height: 8px;
-        margin: 0px;
-        border-radius: 4px;
-    }}
-    QScrollBar::handle:horizontal {{
-        background: rgba(137, 180, 250, 0.4);
-        min-width: 20px;
-        border-radius: 4px;
-    }}
+    Returns the fully-substituted QSS string. ``@unknown`` tokens are
+    left as-is so a missing token is visible in the rendered output
+    rather than silently swallowed.
     """
+    if theme == "dark":
+        path = _DARK_THEME_PATH
+    else:
+        path = os.path.join(_THEMES_DIR, f"tawreed_{theme}.qss")
+
+    with open(path, "r", encoding="utf-8") as fh:
+        raw = fh.read()
+
+    def _sub(match: "re.Match[str]") -> str:  # type: ignore[name-defined]
+        token = match.group(1)
+        return _TOKEN_MAP.get(token, match.group(0))
+
+    import re
+    return re.sub(r"@([a-z0-9-]+)", _sub, raw)
 
 
-# Backwards-compat alias so the dialog (now removed) keeps its old import
-# working during the deprecation window.
-MAIN_WINDOW_STYLE = _build()
-SETTINGS_DIALOG_STYLE = _build()  # legacy name
+# ----- Legacy compatibility shims -----
+#
+# Pre-PR-#4 code imported ``MAIN_WINDOW_STYLE`` and
+# ``SETTINGS_DIALOG_STYLE`` as module-level strings. We keep them as
+# eager-loaded values for one release so any third-party widget that
+# still imports them works. They will be removed in a later cleanup PR.
+MAIN_WINDOW_STYLE = load_stylesheet("dark")
+SETTINGS_DIALOG_STYLE = MAIN_WINDOW_STYLE

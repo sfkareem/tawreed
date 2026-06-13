@@ -1,43 +1,96 @@
 import json
+import logging
 import re
 import httpx
 import openai
 from datetime import datetime
 from typing import List, Dict, Any, Tuple
 
+log = logging.getLogger(__name__)
+
 PROVIDERS = {
     "OpenAI": {
-        "base_url": "https://api.minimax.io/v1",
-        "models": ["MiniMax-M3", "gpt-4o", "gpt-4o-mini", "o1"],
-        "default_model": "MiniMax-M3",
-        "requires_base_url": True,
+        "base_url": "https://api.openai.com/v1",
+        # Curated fallback for offline / unkeyed startup. The live
+        # /models endpoint is the source of truth — click "Refresh
+        # Models" in Settings to replace this list.
+        "models": [
+            # Current flagship
+            "gpt-4.1",
+            "gpt-4.1-mini",
+            "gpt-4.1-nano",
+            # 4o family (still in wide use)
+            "gpt-4o",
+            "gpt-4o-mini",
+            "gpt-4-turbo",
+            # Reasoning
+            "o3",
+            "o3-mini",
+            "o4-mini",
+            "o1",
+            "o1-mini",
+        ],
+        "default_model": "gpt-4.1-mini",
+        "requires_base_url": False,
         "transport": "openai",
-        "label": "OpenAI (custom base URL)"
+        "label": "OpenAI",
+        "hint": "Official OpenAI Chat Completions API (ChatGPT models). "
+                "Uses api.openai.com by default. Click 'Refresh Models' to "
+                "pull the live list from your account.",
     },
     "Google": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "models": ["gemini-1.5-pro", "gemini-1.5-flash"],
-        "default_model": "gemini-1.5-pro",
+        "models": [
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+            "gemini-1.5-pro",
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-8b",
+        ],
+        "default_model": "gemini-2.5-flash",
         "requires_base_url": False,
         "transport": "openai_compat",
-        "label": "Google Gemini"
+        "label": "Google Gemini",
+        "hint": "Uses the OpenAI-compatible Gemini endpoint. "
+                "'Refresh Models' lists everything available on the Google Generative AI API.",
     },
     "Claude": {
         "base_url": "https://api.anthropic.com/v1",
-        "models": ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
-        "default_model": "claude-3-5-sonnet-20241022",
+        "models": [
+            "claude-sonnet-4-5",
+            "claude-sonnet-4-20250514",
+            "claude-3-7-sonnet-20250219",
+            "claude-3-5-sonnet-20241022",
+            "claude-3-5-haiku-20241022",
+            "claude-3-opus-20240229",
+        ],
+        "default_model": "claude-sonnet-4-5",
         "requires_base_url": False,
         "transport": "native_anthropic",
-        "label": "Anthropic Claude"
+        "label": "Anthropic Claude",
+        "hint": "Native Anthropic Messages API. 'Refresh Models' queries the live /v1/models endpoint.",
     },
     "OpenAI Compatible": {
+        # Catch-all for any service that speaks the OpenAI Chat
+        # Completions protocol: local inference servers (LM Studio,
+        # vLLM, llama.cpp, Ollama), or third-party hosted endpoints.
+        # No curated models — the user picks / types a model name,
+        # and 'Refresh Models' hits {base_url}/models if the endpoint
+        # implements it.
         "base_url": "",
         "models": [],
         "default_model": "",
         "requires_base_url": True,
         "transport": "openai",
-        "label": "OpenAI-Compatible (custom)"
-    }
+        "label": "OpenAI Compatible",
+        "hint": "Use this for any OpenAI-protocol service — local servers "
+                "(LM Studio, vLLM, llama.cpp, Ollama) or hosted providers "
+                "(MiniMax, Groq, Together, etc.). Set the Base URL, paste "
+                "an API key if the service requires one, then click "
+                "'Refresh Models' to auto-detect the available models.",
+    },
 }
 
 
@@ -182,63 +235,113 @@ def extract_json_from_text(text: str) -> dict:
             
     return normalized_data
 
-def analyze_boq_stream(api_key: str, base_url: str, model_id: str, system_prompt: str, user_prompt: str):
+def analyze_boq_stream(
+    api_key: str, base_url: str, model_id: str,
+    system_prompt: str, user_prompt: str,
+):
+    """Stream LLM tokens + the final parsed JSON to the caller.
+
+    Yield shape: ``(text, is_thought)`` for incremental UI rendering,
+    then a single terminal ``("__DONE__", parsed_dict)`` sentinel so
+    the consumer can retrieve the final result without relying on
+    the ``StopIteration.value`` pattern (which is fragile and breaks
+    if the generator is interrupted by an exception, by a break, or
+    by ``StopIteration`` leaking from a nested iterator).
+
+    The previous implementation used ``return parsed_data`` and the
+    consumer caught ``StopIteration`` — a pattern that is documented
+    in PEP 380 but is easy to break in real code. The new sentinel
+    approach is more robust: every code path ends with an explicit
+    yield, so the consumer never has to reason about generator
+    completion semantics.
+
+    Returns a dict with at least these keys:
+      - ``project_name`` (str, possibly the default "Tawreed Project")
+      - ``date`` (str, YYYY-MM-DD)
+      - ``items`` (dict mapping item-id → work-package name)
+      - ``error`` (str or None)
+    """
+    accumulated_content: list[str] = []
+    parsed_data: dict = {}
+    error_msg: str | None = None
+
     try:
         client = openai.OpenAI(api_key=api_key, base_url=base_url)
-        
         response = client.chat.completions.create(
             model=model_id,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
             stream=True,
-            temperature=0.0
+            temperature=0.0,
         )
-        
+
         parser = ContentStreamParser()
-        accumulated_content = []
-        
         for chunk in response:
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
-            
+
             reasoning = getattr(delta, "reasoning_content", None)
             if reasoning:
                 yield (reasoning, True)
                 continue
-                
+
             content = getattr(delta, "content", None)
             if content:
                 for token_text, is_thought in parser.feed(content):
                     yield (token_text, is_thought)
                     if not is_thought:
                         accumulated_content.append(token_text)
-                        
+
         for token_text, is_thought in parser.flush():
             yield (token_text, is_thought)
             if not is_thought:
                 accumulated_content.append(token_text)
-                
+
         full_content_str = "".join(accumulated_content).strip()
-        parsed_data = extract_json_from_text(full_content_str)
-        if "project_name" not in parsed_data:
-            parsed_data["project_name"] = "Tawreed Project"
-        if "date" not in parsed_data:
-            parsed_data["date"] = datetime.now().strftime("%Y-%m-%d")
-        if "items" not in parsed_data:
-            parsed_data["items"] = {}
-        return parsed_data
-        
+        if not full_content_str:
+            error_msg = "Model returned an empty response (no content streamed)."
+        else:
+            parsed_data = extract_json_from_text(full_content_str)
+            if not parsed_data:
+                error_msg = (
+                    f"Could not parse JSON from the model output "
+                    f"({len(full_content_str)} chars received)."
+                )
+
     except Exception as e:
-        print(f"Error in analyze_boq_stream: {e}")
-        return {
-            "project_name": "Tawreed Project",
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "items": {},
-            "error": str(e)
-        }
+        # The consumer must always get a terminal __DONE__ yield so it
+        # can surface the error in the UI. Logging to stderr is fine
+        # for the dev console; the error is also embedded in the
+        # result dict.
+        log.exception("Error in analyze_boq_stream")
+        error_msg = f"{type(e).__name__}: {e}"
+
+    # ---- Terminal yield: always reached, even on error ----
+    if "project_name" not in parsed_data:
+        parsed_data["project_name"] = "Tawreed Project"
+    if "date" not in parsed_data:
+        parsed_data["date"] = datetime.now().strftime("%Y-%m-%d")
+    if "items" not in parsed_data or not isinstance(parsed_data.get("items"), dict):
+        # The model might have returned a flat dict like
+        # {"R1": "Plumbing", "R2": "HVAC"} instead of the nested
+        # {"items": {...}} schema. Lift it into the expected shape
+        # so the downstream Excel writer doesn't break.
+        if parsed_data and "items" not in parsed_data:
+            # Only treat as items if every value is a string (looks
+            # like the flat item-id → package map). Otherwise leave
+            # items as an empty dict and surface the mismatch.
+            if all(isinstance(v, str) for v in parsed_data.values()):
+                parsed_data["items"] = {
+                    str(k): str(v) for k, v in parsed_data.items()
+                    if k not in ("project_name", "date")
+                }
+            else:
+                parsed_data["items"] = {}
+    parsed_data["error"] = error_msg
+    yield ("__DONE__", parsed_data)
 
 async def test_connection(provider: str, api_key: str, model: str, base_url: str = "") -> bool:
     try:
@@ -280,7 +383,7 @@ async def test_connection(provider: str, api_key: str, model: str, base_url: str
                 resp = await client.post(endpoint, headers=headers, json=data, timeout=10.0)
                 return resp.status_code == 200
     except Exception as e:
-        print(f"test_connection exception: {e}")
+        log.exception("test_connection exception")
         return False
 
 async def process_boq_batch(items: list, provider: str, api_key: str, model: str, base_url: str = "") -> dict:
@@ -343,5 +446,5 @@ async def process_boq_batch(items: list, provider: str, api_key: str, model: str
             return {str(idx): "General" for idx in range(len(items))}
             
     except Exception as e:
-        print(f"Error in process_boq_batch: {e}")
+        log.exception("Error in process_boq_batch")
         return {str(idx): "General" for idx in range(len(items))}

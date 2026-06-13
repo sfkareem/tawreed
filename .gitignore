@@ -73,6 +73,10 @@ secret.*
 service-account*.json
 .ai_config.json
 *.local.json
+# config.json is the live user config (Lives at ~/.tawreed/config.json
+# at runtime, but ignore the bare filename as belt-and-braces — never
+# commit a developer's local config.json by accident).
+config.json
 
 # ----- Logs -----
 *.log

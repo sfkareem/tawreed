@@ -3,6 +3,7 @@
 A QMainWindow with:
 - a fixed-width left rail (navigation buttons)
 - a QStackedWidget that swaps in the current page
+- a status footer in the rail (version + repo link)
 
 Pages live in ``gui/pages/``. To add a new page:
 1. Create ``gui/pages/<name>_page.py`` with a ``<Name>Page(QWidget)`` class.
@@ -14,15 +15,19 @@ import os
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QPushButton, QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizePolicy,
+    QFrame,
 )
 from PySide6.QtCore import Qt, QSize, QSettings
 from PySide6.QtGui import QPixmap, QColor
 
-from gui.styles import MAIN_WINDOW_STYLE
+from gui.styles import load_stylesheet
 from gui.pages.workspace_page import WorkspacePage
 from gui.pages.history_page import HistoryPage
 from gui.pages.settings_page import SettingsPage
 from gui.pages.about_page import AboutPage
+from gui.assets import LOGO_PNG_PATH
+
+from tawreed_app import __version__, __appname__
 
 
 class MainWindow(QMainWindow):
@@ -37,8 +42,8 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Tawreed — AI BOQ Processing")
-        self.setStyleSheet(MAIN_WINDOW_STYLE)
+        self.setWindowTitle(f"{__appname__} — AI BOQ Processing")
+        self.setStyleSheet(load_stylesheet("dark"))
 
         self._nav_buttons: dict[str, QPushButton] = {}
         self._pages: dict[str, QWidget] = {}
@@ -65,7 +70,7 @@ class MainWindow(QMainWindow):
         rail.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
         rail_layout = QVBoxLayout(rail)
-        rail_layout.setContentsMargins(16, 24, 16, 24)
+        rail_layout.setContentsMargins(16, 24, 16, 20)
         rail_layout.setSpacing(8)
 
         # Brand block
@@ -75,12 +80,9 @@ class MainWindow(QMainWindow):
         brand_layout.setSpacing(6)
 
         logo_label = QLabel()
-        logo_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "tawreed_logo_transparent.png"
-        )
-        if os.path.exists(logo_path):
-            pixmap = QPixmap(logo_path).scaled(
-                96, 96, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        if LOGO_PNG_PATH.exists():
+            pixmap = QPixmap(str(LOGO_PNG_PATH)).scaled(
+                72, 72, Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
             logo_label.setPixmap(pixmap)
         else:
@@ -93,6 +95,11 @@ class MainWindow(QMainWindow):
         app_label.setObjectName("navBrand")
         app_label.setAlignment(Qt.AlignCenter)
         brand_layout.addWidget(app_label)
+
+        tagline = QLabel("AI BOQ work packages")
+        tagline.setObjectName("navTagline")
+        tagline.setAlignment(Qt.AlignCenter)
+        brand_layout.addWidget(tagline)
 
         rail_layout.addWidget(brand)
 
@@ -111,7 +118,13 @@ class MainWindow(QMainWindow):
 
         rail_layout.addStretch(1)
 
-        footer = QLabel("v0.1.0")
+        # Accent stripe (visual brand mark, sits above the footer).
+        stripe = QFrame()
+        stripe.setObjectName("navAccentStripe")
+        stripe.setFixedHeight(2)
+        rail_layout.addWidget(stripe)
+
+        footer = QLabel(f"v{__version__}  ·  {__appname__}")
         footer.setObjectName("navFooter")
         footer.setAlignment(Qt.AlignCenter)
         rail_layout.addWidget(footer)
@@ -126,9 +139,9 @@ class MainWindow(QMainWindow):
         container_layout.setSpacing(0)
 
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(24)
-        shadow.setColor(QColor(0, 0, 0, 110))
-        shadow.setOffset(0, 6)
+        shadow.setBlurRadius(28)
+        shadow.setColor(QColor(0, 0, 0, 120))
+        shadow.setOffset(0, 8)
         container.setGraphicsEffect(shadow)
 
         self._stack = QStackedWidget(container)
@@ -170,12 +183,29 @@ class MainWindow(QMainWindow):
         if geometry is not None:
             self.restoreGeometry(geometry)
         else:
-            self.resize(1100, 760)
+            self.resize(1180, 800)
         # Last-visited page (default: workspace). Use select_page so the
         # nav highlight and the page's refresh hook both fire.
         last = settings.value("last_page", "workspace")
         if last in self._pages:
             self.select_page(last)
+
+    # ----- Single-instance integration -----------------------------------
+
+    def bring_to_front(self, _message: str = "") -> None:
+        """Slot for the SingleApplication message_received signal.
+
+        Raises and activates the window so the user sees the existing
+        instance when they double-click the icon a second time.
+        """
+        if self.isMinimized():
+            self.showNormal()
+        if not self.isVisible():
+            self.show()
+        self.raise_()
+        self.activateWindow()
+
+    # ----- Window state persistence --------------------------------------
 
     def closeEvent(self, event) -> None:
         settings = QSettings("sfkareem", "Tawreed")

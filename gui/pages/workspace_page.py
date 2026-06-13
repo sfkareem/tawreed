@@ -1,86 +1,250 @@
-"""Main Workspace page: the BOQ processor UI.
+"""Workspace page — the BOQ processing entry point.
 
-This is the page the user lands on when they open the app. It hosts
-the file-picker, the primary action button, and the live console that
-streams AI progress.
-
-Behaviour is identical to the previous monolithic MainWindow content;
-this file just relocates the layout into a QWidget subclass so the
-shell can swap it in and out of a QStackedWidget.
+Senior design choices:
+- Card-based layout: one card for input controls, one for the
+  live console. The two cards don't compete for vertical space.
+- Status pill in the header so the user knows the current state
+  (idle / running / success / error) without scanning the console.
+- Larger console with monospace font and explicit "Clear log"
+  action so long runs are easier to triage.
+- Drop zone visual: a clickable card that opens the file picker,
+  with a primary "Start Processing" button that lights up only
+  when a file is selected.
 """
-import os
+from __future__ import annotations
+
 import asyncio
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QTextEdit, QFileDialog, QMessageBox,
+    QSizePolicy, QFrame,
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QDragEnterEvent, QDropEvent
 
 from core import db
 from gui.worker import BOQProcessor, WorkerSignals
+from gui.widgets import Card, PageHeader, Section, StatusPill
+
+
+class _DropZone(QFrame):
+    """A clickable / drag-droppable file picker.
+
+    Emits ``file_selected`` when the user picks a path via the file
+    dialog (button click) or by dragging an .xlsx onto the surface.
+    """
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("dropZone")
+        self.setAcceptDrops(True)
+        self.setMinimumHeight(110)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(4)
+        self._title = QLabel("Drop a BOQ Excel file here")
+        self._title.setObjectName("dropZoneTitle")
+        self._title.setAlignment(Qt.AlignCenter)
+        self._subtitle = QLabel("or click to browse  ·  .xlsx / .xls")
+        self._subtitle.setObjectName("dropZoneSubtitle")
+        self._subtitle.setAlignment(Qt.AlignCenter)
+        layout.addStretch()
+        layout.addWidget(self._title)
+        layout.addWidget(self._subtitle)
+        layout.addStretch()
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self._open_dialog()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def _open_dialog(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select BOQ Excel File", "", "Excel Files (*.xlsx *.xls)"
+        )
+        if path:
+            # Walk up to the QWidget that owns a file_selected handler.
+            w: QWidget = self
+            while w is not None and not hasattr(w, "file_selected"):
+                w = w.parentWidget()
+            if w is not None:
+                w.file_selected.emit(path)  # type: ignore[attr-defined]
+
+    # ----- drag & drop ----------------------------------------------------
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        urls = event.mimeData().urls()
+        if not urls:
+            event.ignore()
+            return
+        path = Path(urls[0].toLocalFile())
+        if not path.exists():
+            event.ignore()
+            return
+        w: QWidget = self
+        while w is not None and not hasattr(w, "file_selected"):
+            w = w.parentWidget()
+        if w is not None:
+            w.file_selected.emit(str(path))  # type: ignore[attr-defined]
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
 
 class WorkspacePage(QWidget):
     """The main BOQ processing workspace."""
 
+    from PySide6.QtCore import Signal
+
+    file_selected = Signal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.selected_file = None
-        self.signals = None
+        self.selected_file: str | None = None
+        self.signals: WorkerSignals | None = None
+        self._last_output_path: str | None = None
         self._build_ui()
+        self.file_selected.connect(self._on_file_selected)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(15)
+        layout.setSpacing(16)
 
-        title = QLabel("BOQ Processor")
-        title.setObjectName("titleLabel")
-        layout.addWidget(title)
+        # ----- Header + status pill -----
+        header_row = QHBoxLayout()
+        header_row.setSpacing(12)
+        header = PageHeader(
+            "BOQ Processor",
+            "Drop a Bill of Quantities Excel file and let Tawreed categorize "
+            "the items into high-level work packages.",
+        )
+        header_row.addWidget(header, stretch=1)
+        self.status_pill = StatusPill()
+        self.status_pill.set_state("idle", "Idle")
+        header_row.addWidget(self.status_pill, alignment=Qt.AlignTop)
+        layout.addLayout(header_row)
 
-        controls_layout = QHBoxLayout()
-        controls_layout.setSpacing(15)
+        # ----- Input card (drop zone + actions) -----
+        input_card = Card("Input")
+
+        self.drop_zone = _DropZone()
+        input_card.addWidget(self.drop_zone)
 
         self.file_label = QLabel("No file selected")
         self.file_label.setObjectName("fileLabel")
+        input_card.addWidget(self.file_label)
 
-        select_btn = QPushButton("Browse BOQ...")
-        select_btn.clicked.connect(self.browse_file)
-
-        self.process_btn = QPushButton("Start Processing")
+        actions = QHBoxLayout()
+        actions.setSpacing(10)
+        self.browse_btn = QPushButton("Browse…")
+        self.browse_btn.clicked.connect(self.browse_file)
+        self.clear_btn = QPushButton("Clear")
+        self.clear_btn.setObjectName("ghostBtn")
+        self.clear_btn.setEnabled(False)
+        self.clear_btn.clicked.connect(self._clear_selection)
+        self.process_btn = QPushButton("▶  Start Processing")
         self.process_btn.setObjectName("primaryBtn")
-        self.process_btn.clicked.connect(self.start_processing)
         self.process_btn.setEnabled(False)
+        self.process_btn.clicked.connect(self.start_processing)
+        # "Open output" and "Show in folder" are enabled only after
+        # a successful run — see on_processing_finished().
+        self.open_output_btn = QPushButton("Open Output")
+        self.open_output_btn.setObjectName("ghostBtn")
+        self.open_output_btn.setEnabled(False)
+        self.open_output_btn.setToolTip("Open the most recently generated Excel in your default app")
+        self.open_output_btn.clicked.connect(self._open_last_output)
+        self.open_folder_btn = QPushButton("Show in Folder")
+        self.open_folder_btn.setObjectName("ghostBtn")
+        self.open_folder_btn.setEnabled(False)
+        self.open_folder_btn.setToolTip("Open the output folder in Windows Explorer with the file selected")
+        self.open_folder_btn.clicked.connect(self._reveal_last_output)
+        actions.addWidget(self.browse_btn)
+        actions.addWidget(self.clear_btn)
+        actions.addWidget(self.open_output_btn)
+        actions.addWidget(self.open_folder_btn)
+        actions.addStretch()
+        actions.addWidget(self.process_btn)
+        input_card.addLayout(actions)
 
-        controls_layout.addWidget(select_btn)
-        controls_layout.addWidget(self.file_label)
-        controls_layout.addStretch()
-        controls_layout.addWidget(self.process_btn)
-        layout.addLayout(controls_layout)
+        layout.addWidget(input_card)
 
-        console_label = QLabel("Live Console")
-        console_label.setObjectName("sectionLabel")
-        layout.addWidget(console_label)
+        # ----- Console card -----
+        console_card = Card("Live Console")
+        console_actions = QHBoxLayout()
+        console_actions.setSpacing(8)
+        self.console_status = QLabel("Awaiting input…")
+        self.console_status.setObjectName("hint")
+        console_actions.addWidget(self.console_status, stretch=1)
+        self.clear_console_btn = QPushButton("Clear Log")
+        self.clear_console_btn.setObjectName("ghostBtn")
+        self.clear_console_btn.clicked.connect(lambda: self.console.clear())
+        console_actions.addWidget(self.clear_console_btn)
+        console_card.addLayout(console_actions)
 
         self.console = QTextEdit()
         self.console.setReadOnly(True)
         self.console.setObjectName("liveConsole")
-        layout.addWidget(self.console, stretch=1)
+        self.console.setMinimumHeight(220)
+        console_card.addWidget(self.console)
+        layout.addWidget(console_card, stretch=1)
+
+    # ----- file selection -------------------------------------------------
+
+    def _on_file_selected(self, path: str) -> None:
+        self.selected_file = path
+        name = os.path.basename(path)
+        self.file_label.setText(name)
+        self.file_label.setToolTip(path)
+        self.process_btn.setEnabled(True)
+        self.clear_btn.setEnabled(True)
+        self.status_pill.set_state("idle", "Ready")
+        self.console_status.setText(f"Loaded: {name}")
+        self.log(f"📄  Loaded {name}\n")
 
     def browse_file(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(
+        path, _ = QFileDialog.getOpenFileName(
             self, "Select BOQ Excel File", "", "Excel Files (*.xlsx *.xls)"
         )
-        if file_path:
-            self.selected_file = file_path
-            self.file_label.setText(os.path.basename(file_path))
-            self.process_btn.setEnabled(True)
+        if path:
+            self._on_file_selected(path)
+
+    def _clear_selection(self) -> None:
+        self.selected_file = None
+        self.file_label.setText("No file selected")
+        self.file_label.setToolTip("")
+        self.process_btn.setEnabled(False)
+        self.clear_btn.setEnabled(False)
+        self.status_pill.set_state("idle", "Idle")
+        self.console_status.setText("Awaiting input…")
+
+    # ----- console helpers ------------------------------------------------
 
     def log(self, text: str) -> None:
         self.console.insertPlainText(text)
-        scrollbar = self.console.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        sb = self.console.verticalScrollBar()
+        sb.setValue(sb.maximum())
+
+    # ----- processing -----------------------------------------------------
 
     def start_processing(self) -> None:
         if not self.selected_file:
@@ -89,15 +253,18 @@ class WorkspacePage(QWidget):
         settings = db.get_settings()
         if not settings or not settings.get("api_key"):
             QMessageBox.warning(
-                self,
-                "Settings Required",
+                self, "Settings Required",
                 "Please configure an API key in Settings first.",
             )
             return
 
         self.process_btn.setEnabled(False)
+        self.browse_btn.setEnabled(False)
+        self.clear_btn.setEnabled(False)
         self.console.clear()
-        self.log("Initializing processor...\n")
+        self.status_pill.set_state("running", "Processing…")
+        self.console_status.setText("Streaming AI output…")
+        self.log("Initializing processor…\n")
 
         # Disconnect any previous signal handlers so the page can be reused.
         self.signals = WorkerSignals()
@@ -110,8 +277,6 @@ class WorkspacePage(QWidget):
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
-            # No event loop in this thread (shouldn't happen in normal flow
-            # because main.py installs qasync, but fall back gracefully).
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
         loop.create_task(processor.process())
@@ -119,11 +284,92 @@ class WorkspacePage(QWidget):
     def on_processing_finished(self, output_path: str) -> None:
         self.log(f"\n\n🎉 Processing complete!\nOutput saved to: {output_path}\n")
         self.process_btn.setEnabled(True)
-        QMessageBox.information(
-            self, "Complete", f"Successfully generated Work Packages!\nSaved to:\n{output_path}"
-        )
+        self.browse_btn.setEnabled(True)
+        self.clear_btn.setEnabled(True)
+        self.status_pill.set_state("success", "Done")
+        self.console_status.setText(f"Saved: {os.path.basename(output_path)}")
+        # Stash the path so the "Open Output" button can find it.
+        self._last_output_path = output_path
+        self.open_output_btn.setEnabled(True)
+        self.open_folder_btn.setEnabled(True)
+
+        # Confirmation dialog with two actions: open the file, or
+        # reveal it in Explorer. Both are common next steps and
+        # make the success state actually actionable.
+        from PySide6.QtWidgets import QMessageBox
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Information)
+        box.setWindowTitle("Complete")
+        box.setText("Successfully generated Work Packages!")
+        box.setInformativeText(f"Saved to:\n{output_path}")
+        open_btn = box.addButton("Open Excel", QMessageBox.AcceptRole)
+        reveal_btn = box.addButton("Show in Folder", QMessageBox.ActionRole)
+        box.addButton(QMessageBox.Close)
+        box.setDefaultButton(open_btn)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is open_btn:
+            self._open_output_file(output_path)
+        elif clicked is reveal_btn:
+            self._reveal_in_folder(output_path)
 
     def on_processing_error(self, error_msg: str) -> None:
         self.log(f"\n\n❌ Error during processing:\n{error_msg}\n")
         self.process_btn.setEnabled(True)
+        self.browse_btn.setEnabled(True)
+        self.clear_btn.setEnabled(True)
+        self.status_pill.set_state("error", "Error")
+        self.console_status.setText(f"Error: {error_msg[:80]}")
+        self.open_output_btn.setEnabled(False)
+        self.open_folder_btn.setEnabled(False)
         QMessageBox.critical(self, "Error", f"Failed to process BOQ:\n{error_msg}")
+
+    # ----- output helpers ------------------------------------------------
+
+    def _open_output_file(self, path: str) -> None:
+        """Open the generated Excel in the OS default viewer."""
+        if not path or not os.path.exists(path):
+            QMessageBox.warning(
+                self, "File missing",
+                f"The output file no longer exists:\n{path}",
+            )
+            return
+        try:
+            if sys.platform == "win32":
+                os.startfile(path)  # type: ignore[attr-defined]
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", path])
+            else:
+                subprocess.Popen(["xdg-open", path])
+        except Exception as e:
+            QMessageBox.critical(self, "Open failed", f"Could not open the file:\n{e}")
+
+    def _reveal_in_folder(self, path: str) -> None:
+        """Open the containing folder in Explorer / Finder / file manager,
+        with the file selected if the OS supports it."""
+        if not path or not os.path.exists(path):
+            QMessageBox.warning(
+                self, "File missing",
+                f"The output file no longer exists:\n{path}",
+            )
+            return
+        try:
+            if sys.platform == "win32":
+                # /select, highlights the file in a new Explorer window.
+                subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", "-R", path])
+            else:
+                subprocess.Popen(["xdg-open", os.path.dirname(path)])
+        except Exception as e:
+            QMessageBox.critical(self, "Reveal failed", f"Could not open the folder:\n{e}")
+
+    def _open_last_output(self) -> None:
+        """Slot for the in-page "Open Output" button."""
+        if self._last_output_path:
+            self._open_output_file(self._last_output_path)
+
+    def _reveal_last_output(self) -> None:
+        """Slot for the in-page "Show in Folder" button."""
+        if self._last_output_path:
+            self._reveal_in_folder(self._last_output_path)

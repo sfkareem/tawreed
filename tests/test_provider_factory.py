@@ -4,17 +4,13 @@ These are pure-Python unit tests — no GUI, no API calls, no DB writes.
 Run with `pytest tests/` from the project root.
 """
 import os
-import sys
 
 import pytest
 
-# Make the project root importable when pytest is invoked from anywhere.
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
+# conftest.py handles the project-root sys.path insertion and the
+# Qt offscreen platform setup. See tests/conftest.py.
 
-from core.ai import (  # noqa: E402  (sys.path tweak above)
+from core.ai import (  # noqa: E402
     PROVIDERS,
     get_provider_names,
     get_provider_config,

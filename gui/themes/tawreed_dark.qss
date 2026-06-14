@@ -1,0 +1,482 @@
+/* Tawreed dark theme — loaded at startup from gui/themes/tawreed_dark.qss.
+ *
+ * All @-prefixed tokens are substituted at load time by
+ * gui.styles.load_stylesheet(), which uses the constants in gui.styles
+ * as the single source of truth. To retheme the app, change a token in
+ * gui.styles and reload — the .qss file does not need to be edited
+ * unless you're adding new selectors.
+ *
+ * Object names referenced (set via setObjectName in widget code):
+ *  - QWidget#navRail           left navigation rail
+ *  - QPushButton#navButton     nav button (default + checked states)
+ *  - QLabel#navBrand / #navBrandFallback / #navTagline / #navFooter
+ *  - QFrame#navAccentStripe    thin brand stripe above the footer
+ *  - QWidget#mainContainer     page content card with shadow
+ *  - QFrame#card               reusable card surface (PageHeader+Card)
+ *  - QLabel#pageTitle / #pageSubtitle
+ *  - QLabel#cardTitle / #sectionTitle
+ *  - QLabel#hint               inline grey helper text
+ *  - QLabel#statusLabel / #statusLabelSuccess
+ *  - QLabel#statusPill         StatusPill widget (uses dynamic `state` prop)
+ *  - QFrame#dropZone           Workspace drop zone (hover state)
+ *  - QLabel#dropZoneTitle / #dropZoneSubtitle
+ *  - QLabel#fileLabel
+ *  - QTextEdit#liveConsole
+ *  - QPushButton#primaryBtn    main action button (Start / Save)
+ *  - QPushButton#ghostBtn      low-emphasis button (Clear)
+ *  - QPushButton#dangerBtn     destructive button (Reset / Delete)
+ *  - QLabel#authorName / #authorUrl
+ *  - QLabel#metaLabel / #metaValue
+ *  - QLabel#footer
+ *  - QTableWidget#historyTable
+ *  - QWidget#splashRoot        splash screen background
+ *  - QLabel#splashTitle        splash screen title
+ *  - QLabel#splashVersion      splash screen version
+ *  - QLabel#splashStatus       splash screen status (updates during boot)
+ */
+
+/* ---- Base ---- */
+QMainWindow {
+    background-color: @color-bg;
+}
+QWidget {
+    color: @color-text;
+    font-size: 13px;
+}
+
+/* ---- Navigation rail ---- */
+QWidget#navRail {
+    background-color: @color-bg-rail;
+    border-right: 1px solid @color-border;
+}
+QLabel#navBrand {
+    color: @color-text;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+}
+QLabel#navTagline {
+    color: @color-text-muted;
+    font-size: 11px;
+    letter-spacing: 0.3px;
+}
+QLabel#navBrandFallback {
+    color: @color-accent;
+    font-size: 22px;
+    font-weight: bold;
+    padding: 20px;
+}
+QLabel#navFooter {
+    color: @color-text-muted;
+    font-size: 11px;
+    padding-top: 8px;
+    letter-spacing: 0.3px;
+}
+QFrame#navAccentStripe {
+    background-color: @color-accent;
+    border: none;
+    border-radius: 1px;
+    margin: 4px 32px 6px 32px;
+}
+QPushButton#navButton {
+    background-color: transparent;
+    color: @color-text-dim;
+    border: 1px solid transparent;
+    border-radius: @radius-md;
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 500;
+}
+QPushButton#navButton:hover {
+    background-color: @color-accent-trans;
+    color: @color-text;
+    border: 1px solid @color-accent-trans-border;
+}
+QPushButton#navButton:checked {
+    background-color: @color-accent-trans-hover;
+    color: @color-accent;
+    border: 1px solid @color-accent;
+    font-weight: 600;
+}
+
+/* ---- Page content container ---- */
+QWidget#mainContainer {
+    background-color: @color-bg-card;
+    border: 1px solid @color-border;
+    border-radius: @radius-xl;
+}
+
+/* ---- Page-level type ---- */
+QLabel#pageTitle {
+    color: #ffffff;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+QLabel#pageSubtitle {
+    color: @color-text-dim;
+    font-size: 13px;
+    line-height: 1.4;
+}
+QLabel#cardTitle {
+    color: @color-text;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+QLabel#sectionTitle {
+    color: @color-text-dim;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+QLabel#hint {
+    color: @color-text-muted;
+    font-size: 12px;
+    line-height: 1.4;
+}
+QLabel#statusLabel {
+    color: @color-text-muted;
+    font-size: 12px;
+}
+QLabel#statusLabelSuccess {
+    color: @color-success;
+    font-size: 12px;
+    font-weight: 600;
+}
+QLabel#metaLabel {
+    color: @color-text-muted;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+QLabel#metaValue {
+    color: @color-text;
+    font-size: 13px;
+}
+QLabel#footer {
+    color: @color-text-muted;
+    font-size: 11px;
+    padding-top: 8px;
+}
+QLabel#authorName {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 700;
+}
+QLabel#authorUrl {
+    color: @color-accent;
+    font-size: 12px;
+}
+
+/* ---- Reusable card ---- */
+QFrame#card {
+    background-color: @color-bg-card-elev;
+    border: 1px solid @color-border;
+    border-radius: @radius-lg;
+}
+
+/* ---- Status pill (state-based) ---- */
+QLabel#statusPill {
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: @color-text-dim;
+    background-color: rgba(255, 255, 255, 0.04);
+    border: 1px solid @color-border;
+    min-width: 64px;
+}
+QLabel#statusPill[state="idle"] {
+    color: @color-text-muted;
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid @color-border;
+}
+QLabel#statusPill[state="running"] {
+    color: @color-accent;
+    background-color: @color-accent-trans;
+    border: 1px solid @color-accent-trans-border;
+}
+QLabel#statusPill[state="success"] {
+    color: @color-success;
+    background-color: rgba(166, 227, 161, 0.10);
+    border: 1px solid rgba(166, 227, 161, 0.30);
+}
+QLabel#statusPill[state="error"] {
+    color: @color-error;
+    background-color: rgba(243, 139, 168, 0.10);
+    border: 1px solid rgba(243, 139, 168, 0.30);
+}
+QLabel#statusPill[state="warning"] {
+    color: @color-warning;
+    background-color: rgba(249, 226, 175, 0.10);
+    border: 1px solid rgba(249, 226, 175, 0.30);
+}
+
+/* ---- Workspace drop zone ---- */
+QFrame#dropZone {
+    background-color: rgba(255, 255, 255, 0.02);
+    border: 1.5px dashed @color-border-input;
+    border-radius: @radius-lg;
+}
+QFrame#dropZone:hover {
+    background-color: @color-accent-trans;
+    border: 1.5px dashed @color-accent;
+}
+QLabel#dropZoneTitle {
+    color: @color-text-dim;
+    font-size: 14px;
+    font-weight: 600;
+}
+QLabel#dropZoneSubtitle {
+    color: @color-text-muted;
+    font-size: 12px;
+}
+QLabel#fileLabel {
+    color: @color-text-dim;
+    font-size: 12px;
+    padding: 4px 2px;
+}
+
+/* ---- Inputs ---- */
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QPlainTextEdit {
+    background-color: @color-bg-input;
+    color: #ffffff;
+    border: 1px solid @color-border-input;
+    border-radius: @radius-sm;
+    padding: 8px 10px;
+    font-size: 13px;
+    selection-background-color: @color-accent;
+    selection-color: @color-text-primary;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QPlainTextEdit:focus {
+    border: 1px solid @color-border-input-focus;
+    background-color: @color-bg-input-focus;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 22px;
+}
+QComboBox::down-arrow {
+    image: none;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid @color-text-dim;
+    margin-right: 8px;
+}
+QComboBox QAbstractItemView {
+    background-color: #131420;
+    color: @color-text;
+    border: 1px solid @color-border;
+    selection-background-color: @color-accent-trans-hover;
+    selection-color: @color-accent;
+    outline: 0;
+    padding: 4px;
+}
+
+/* Checkboxes — make them readable on the dark surface */
+QCheckBox {
+    color: @color-text-dim;
+    spacing: 8px;
+}
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid @color-border-input;
+    border-radius: 3px;
+    background-color: @color-bg-input;
+}
+QCheckBox::indicator:hover {
+    border: 1px solid @color-accent;
+}
+QCheckBox::indicator:checked {
+    background-color: @color-accent;
+    border: 1px solid @color-accent;
+}
+
+/* ---- Live console ---- */
+QTextEdit#liveConsole {
+    background-color: rgba(10, 11, 18, 0.6);
+    color: @color-text;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: @radius-lg;
+    padding: 12px;
+    font-family: @type-mono;
+    font-size: 13px;
+    selection-background-color: @color-accent;
+}
+
+/* ---- Tables ---- */
+QTableWidget#historyTable {
+    background-color: rgba(10, 11, 18, 0.45);
+    alternate-background-color: rgba(255, 255, 255, 0.02);
+    gridline-color: @color-border;
+    border: 1px solid @color-border;
+    border-radius: @radius-md;
+    selection-background-color: @color-accent-trans-hover;
+    selection-color: @color-accent;
+}
+QTableWidget#historyTable::item {
+    padding: 8px 10px;
+}
+QHeaderView::section {
+    background-color: @color-bg-input;
+    color: @color-text-dim;
+    padding: 9px 10px;
+    border: none;
+    border-bottom: 1px solid @color-border;
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+/* ---- Buttons ---- */
+QPushButton {
+    background-color: @color-accent-trans;
+    color: @color-accent;
+    border: 1px solid @color-accent-trans-border;
+    border-radius: @radius-md;
+    padding: 9px 18px;
+    font-weight: 600;
+    font-size: 13px;
+}
+QPushButton:hover {
+    background-color: @color-accent-trans-hover;
+    border: 1px solid @color-accent-trans-border-hover;
+}
+QPushButton:pressed {
+    background-color: @color-accent-trans-border;
+    color: #ffffff;
+}
+QPushButton:disabled {
+    background-color: @color-accent-trans;
+    color: @color-text-muted;
+    border: 1px solid @color-border;
+}
+QPushButton#primaryBtn {
+    background-color: @color-accent;
+    color: @color-text-primary;
+    border: none;
+    padding: 10px 22px;
+}
+QPushButton#primaryBtn:hover {
+    background-color: @color-accent-hover;
+}
+QPushButton#primaryBtn:disabled {
+    background-color: @color-accent-trans-hover;
+    color: rgba(13, 14, 21, 0.6);
+}
+QPushButton#ghostBtn {
+    background-color: transparent;
+    color: @color-text-dim;
+    border: 1px solid @color-border;
+    padding: 9px 14px;
+}
+QPushButton#ghostBtn:hover {
+    background-color: @color-bg-input;
+    color: @color-text;
+    border: 1px solid @color-border-input;
+}
+QPushButton#ghostBtn:disabled {
+    color: @color-text-muted;
+    background-color: transparent;
+    border: 1px solid @color-border;
+}
+QPushButton#dangerBtn {
+    background-color: transparent;
+    color: @color-error;
+    border: 1px solid rgba(243, 139, 168, 0.30);
+    padding: 9px 16px;
+}
+QPushButton#dangerBtn:hover {
+    background-color: rgba(243, 139, 168, 0.10);
+    border: 1px solid rgba(243, 139, 168, 0.55);
+    color: @color-error;
+}
+QPushButton#dangerBtn:disabled {
+    color: @color-text-muted;
+    border: 1px solid @color-border;
+    background-color: transparent;
+}
+
+/* ---- Scrollbar ---- */
+QScrollBar:vertical {
+    border: none;
+    background: rgba(255, 255, 255, 0.02);
+    width: 8px;
+    margin: 0px;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical {
+    background: rgba(137, 180, 250, 0.4);
+    min-height: 20px;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical:hover {
+    background: rgba(137, 180, 250, 0.7);
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+QScrollBar:horizontal {
+    border: none;
+    background: rgba(255, 255, 255, 0.02);
+    height: 8px;
+    margin: 0px;
+    border-radius: 4px;
+}
+QScrollBar::handle:horizontal {
+    background: rgba(137, 180, 250, 0.4);
+    min-width: 20px;
+    border-radius: 4px;
+}
+
+/* ---- Splash screen ---- */
+QWidget#splashRoot {
+    background-color: @color-bg;
+}
+QLabel#splashTitle {
+    color: #ffffff;
+    font-size: 32px;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+QLabel#splashVersion {
+    color: @color-text-dim;
+    font-size: 13px;
+}
+QLabel#splashStatus {
+    color: @color-text-muted;
+    font-size: 12px;
+}
+
+/* ---- Tooltip ---- */
+QToolTip {
+    background-color: #131420;
+    color: @color-text;
+    border: 1px solid @color-border;
+    border-radius: @radius-sm;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+/* ---- Message boxes (QMessageBox is just a QDialog) ---- */
+QMessageBox {
+    background-color: @color-bg;
+}
+QMessageBox QLabel {
+    color: @color-text;
+    font-size: 13px;
+}
+QMessageBox QPushButton {
+    min-width: 80px;
+}

@@ -24,6 +24,22 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
+      # PySide6 needs the platform's EGL/GL stack at import time, even
+      # when running under the offscreen QPA platform plugin (the
+      # tests set QT_QPA_PLATFORM=offscreen but libEGL.so.1 still has
+      # to be present for Qt to dlopen the platform plugin). Windows
+      # runners ship with the OpenGL libs already, so we only install
+      # on Linux.
+      - name: Install system deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1 libgl1 libxkbcommon-x11-0 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-xfixes0 libdbus-1-3
+
       - name: Install
         run: pip install -e ".[dev]"
 

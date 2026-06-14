@@ -4,12 +4,11 @@ We never touch the real TAWREED_DIR — every test points core.db at
 a tmp_path so the user's actual config / history / outputs are
 untouched.
 """
+
 from __future__ import annotations
 
-import os
 import sqlite3
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
@@ -38,8 +37,10 @@ def isolated_tawreed_dir(tmp_path, monkeypatch):
 
 
 def _write_config(p: Path) -> None:
-    p.write_text('{"provider": "OpenAI", "api_key": "sk-test-abc123", "model": "MiniMax-M3"}',
-                 encoding="utf-8")
+    p.write_text(
+        '{"provider": "OpenAI", "api_key": "sk-test-abc123", "model": "MiniMax-M3"}',
+        encoding="utf-8",
+    )
 
 
 def _seed_history(n: int) -> None:
@@ -109,6 +110,7 @@ def test_reset_handles_missing_files_gracefully(isolated_tawreed_dir):
 def test_reset_clears_qsettings(monkeypatch):
     """Mock QSettings so we don't pollute the user's real registry."""
     from PySide6.QtCore import QSettings
+
     calls = {"cleared": False}
 
     class FakeSettings:
@@ -135,6 +137,7 @@ def test_reset_returns_human_summary(isolated_tawreed_dir):
     _seed_history(2)
     _seed_outputs(4)
     import sys
+
     sys.stderr.write("DEBUG OUTPUTS_DIR: " + str(db.OUTPUTS_DIR) + "\n")
     sys.stderr.write("DEBUG contents: " + str(list(Path(db.OUTPUTS_DIR).iterdir())) + "\n")
     sys.stderr.flush()

@@ -29,6 +29,7 @@ PID file location: imported from ``core.db`` so it always sits at
 ``<app_root>/tawreed/single-instance.pid`` next to the rest of the
 app state. No more split between %LOCALAPPDATA% and the project dir.
 """
+
 from __future__ import annotations
 
 import getpass
@@ -36,12 +37,11 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication
 
 from core.db import PID_FILE_PATH as _PID_FILE_PATH_FROM_DB
-
 
 _SERVER_NAME_BASE = "tawreed-single-instance"
 
@@ -77,18 +77,15 @@ def _is_pid_alive(pid: int) -> bool:
     if sys.platform == "win32":
         import ctypes
         import ctypes.wintypes
+
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
         STILL_ACTIVE = 259
-        handle = ctypes.windll.kernel32.OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION, False, pid
-        )
+        handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
         if not handle:
             return False
         try:
             exit_code = ctypes.wintypes.DWORD()
-            ok = ctypes.windll.kernel32.GetExitCodeProcess(
-                handle, ctypes.byref(exit_code)
-            )
+            ok = ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
             return bool(ok) and exit_code.value == STILL_ACTIVE
         finally:
             ctypes.windll.kernel32.CloseHandle(handle)
@@ -243,6 +240,7 @@ class SingleApplication(QApplication):
         QLocalServer.removeServer(name)
         if sys.platform == "win32":
             import ctypes
+
             ctypes.windll.kernel32.DeleteFileW(f"\\\\.\\pipe\\{name}")
 
         self._server = QLocalServer(self)
@@ -271,6 +269,7 @@ class SingleApplication(QApplication):
         if sys.platform == "win32":
             try:
                 import ctypes
+
                 ctypes.windll.kernel32.DeleteFileW(f"\\\\.\\pipe\\{name}")
             except OSError:
                 pass

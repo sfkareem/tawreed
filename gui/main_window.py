@@ -10,25 +10,30 @@ Pages live in ``gui/pages/``. To add a new page:
 2. Import it below and register it in ``self._pages`` with a label.
 3. Add a button in ``_build_nav()``.
 """
-import os
 
+from PySide6.QtCore import QSettings, Qt
+from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QPushButton, QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizePolicy,
     QFrame,
+    QGraphicsDropShadowEffect,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QPushButton,
+    QSizePolicy,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QSize, QSettings
-from PySide6.QtGui import QPixmap, QColor
 
-from gui.styles import load_stylesheet
-from gui.pages.workspace_page import WorkspacePage
+from core.i18n import I18n, get_i18n
+from gui.assets import LOGO_PNG_PATH
+from gui.pages.about_page import AboutPage
 from gui.pages.history_page import HistoryPage
 from gui.pages.settings_page import SettingsPage
-from gui.pages.about_page import AboutPage
-from gui.assets import LOGO_PNG_PATH
-from core.i18n import get_i18n, I18n
-
-from tawreed_app import __version__, __appname__
+from gui.pages.workspace_page import WorkspacePage
+from gui.styles import load_stylesheet
+from tawreed_app import __appname__, __version__
 
 
 class MainWindow(QMainWindow):
@@ -167,7 +172,7 @@ class MainWindow(QMainWindow):
         self._pages["history"] = HistoryPage()
         self._pages["settings"] = SettingsPage()
         self._pages["about"] = AboutPage()
-        for key, widget in self._pages.items():
+        for _key, widget in self._pages.items():
             self._stack.addWidget(widget)
 
         return container

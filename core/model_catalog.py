@@ -25,11 +25,11 @@ This module is intentionally import-time side-effect-free — it only
 runs when ``fetch_models()`` is called. That matters for tests and
 for the splash→main transition where we want a fast cold start.
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 import httpx
 
@@ -71,21 +71,21 @@ class ModelFetchResult:
     """
 
     provider: str
-    models: List[str] = field(default_factory=list)
+    models: list[str] = field(default_factory=list)
     source: str = "curated"
-    error: Optional[str] = None
+    error: str | None = None
 
 
-def _curated(provider: str) -> List[str]:
+def _curated(provider: str) -> list[str]:
     """Return the curated list for ``provider`` (may be empty)."""
     cfg = PROVIDERS.get(provider, {})
     return list(cfg.get("models", []))
 
 
-def _sort_dedupe(items: List[str]) -> List[str]:
+def _sort_dedupe(items: list[str]) -> list[str]:
     """Stable sort, case-insensitive, drop empties and duplicates."""
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for raw in items:
         s = (raw or "").strip()
         if not s:
@@ -104,7 +104,7 @@ def _sort_dedupe(items: List[str]) -> List[str]:
 # ---------------------------------------------------------------------------
 
 
-async def _fetch_openai(api_key: str, base_url: str) -> List[str]:
+async def _fetch_openai(api_key: str, base_url: str) -> list[str]:
     """OpenAI / OpenAI-compatible ``GET {base_url}/models``."""
     url = f"{base_url.rstrip('/')}/models"
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
@@ -116,7 +116,7 @@ async def _fetch_openai(api_key: str, base_url: str) -> List[str]:
     return [m.get("id") or m.get("name") for m in items if isinstance(m, dict)]
 
 
-async def _fetch_anthropic(api_key: str) -> List[str]:
+async def _fetch_anthropic(api_key: str) -> list[str]:
     """Anthropic ``GET https://api.anthropic.com/v1/models``."""
     url = "https://api.anthropic.com/v1/models"
     headers = {
@@ -131,7 +131,7 @@ async def _fetch_anthropic(api_key: str) -> List[str]:
     return [m.get("id") for m in items if isinstance(m, dict)]
 
 
-async def _fetch_google(api_key: str) -> List[str]:
+async def _fetch_google(api_key: str) -> list[str]:
     """Google Gemini ``GET .../v1beta/models?key=...``."""
     url = "https://generativelanguage.googleapis.com/v1beta/models"
     params = {"key": api_key}
@@ -141,13 +141,13 @@ async def _fetch_google(api_key: str) -> List[str]:
         data = resp.json()
     items = data.get("models") or []
     # Gemini returns names like "models/gemini-1.5-pro" — strip prefix.
-    out: List[str] = []
+    out: list[str] = []
     for m in items:
         if not isinstance(m, dict):
             continue
         name = m.get("name") or ""
         if name.startswith("models/"):
-            name = name[len("models/"):]
+            name = name[len("models/") :]
         if name:
             out.append(name)
     return out
@@ -174,20 +174,26 @@ async def fetch_models(
 
     if provider not in PROVIDERS:
         return ModelFetchResult(
-            provider=provider, models=curated, source="curated",
+            provider=provider,
+            models=curated,
+            source="curated",
             error=f"Unknown provider: {provider!r}",
         )
 
     if not api_key:
         return ModelFetchResult(
-            provider=provider, models=curated, source="curated",
+            provider=provider,
+            models=curated,
+            source="curated",
             error="No API key — showing curated list.",
         )
 
     # Custom OpenAI-compatible needs a base URL.
     if provider == "OpenAI Compatible" and not base_url.strip():
         return ModelFetchResult(
-            provider=provider, models=curated, source="manual",
+            provider=provider,
+            models=curated,
+            source="manual",
             error="Enter a base URL and refresh to fetch live models.",
         )
 
@@ -201,23 +207,31 @@ async def fetch_models(
             raw = await _fetch_google(api_key)
         else:
             return ModelFetchResult(
-                provider=provider, models=curated, source="curated",
+                provider=provider,
+                models=curated,
+                source="curated",
                 error=f"No live fetcher for provider: {provider!r}",
             )
     except httpx.HTTPStatusError as e:
         return ModelFetchResult(
-            provider=provider, models=curated, source="curated",
+            provider=provider,
+            models=curated,
+            source="curated",
             error=f"HTTP {e.response.status_code} from provider.",
         )
     except (httpx.RequestError, httpx.TimeoutException) as e:
         return ModelFetchResult(
-            provider=provider, models=curated, source="curated",
+            provider=provider,
+            models=curated,
+            source="curated",
             error=f"Network error: {e.__class__.__name__}.",
         )
     except Exception as e:  # parse errors, JSON shape changes, etc.
         log.warning("fetch_models: unexpected error for %s: %s", provider, e)
         return ModelFetchResult(
-            provider=provider, models=curated, source="curated",
+            provider=provider,
+            models=curated,
+            source="curated",
             error=f"Parse error: {e}",
         )
 
@@ -227,7 +241,9 @@ async def fetch_models(
         # Provider responded but returned nothing usable; show curated
         # so the dropdown isn't empty.
         return ModelFetchResult(
-            provider=provider, models=curated, source="curated",
+            provider=provider,
+            models=curated,
+            source="curated",
             error="Provider returned no models — showing curated list.",
         )
 
@@ -237,5 +253,7 @@ async def fetch_models(
     # combined list.
     merged = live + [m for m in curated if m.lower() not in {x.lower() for x in live}]
     return ModelFetchResult(
-        provider=provider, models=_sort_dedupe(merged), source="live",
+        provider=provider,
+        models=_sort_dedupe(merged),
+        source="live",
     )

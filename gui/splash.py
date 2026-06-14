@@ -17,11 +17,12 @@ Design decisions:
 - ``finish(window)`` is called by the caller once the main window is
   shown — Qt handles the fade-out.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap, QPainter, QColor, QFont
-from PySide6.QtWidgets import QSplashScreen, QApplication
+from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
+from PySide6.QtWidgets import QApplication, QSplashScreen
 
 from gui.assets import LOGO_PNG_PATH
 from tawreed_app import __version__
@@ -70,8 +71,14 @@ def _build_pixmap() -> QPixmap:
     tagline_font = QFont("Segoe UI", 10)
     painter.setFont(tagline_font)
     painter.setPen(QColor("#a6adc8"))
-    painter.drawText(0, 150, _WIDTH, 24, Qt.AlignHCenter | Qt.AlignVCenter,
-                     "AI-driven BOQ work-package extraction")
+    painter.drawText(
+        0,
+        150,
+        _WIDTH,
+        24,
+        Qt.AlignHCenter | Qt.AlignVCenter,
+        "AI-driven BOQ work-package extraction",
+    )
 
     # Version (bottom-left)
     version_font = QFont("Segoe UI", 9)

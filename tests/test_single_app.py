@@ -17,16 +17,15 @@ What we *can* test in-process is:
 - Importing the module has no side effects beyond defining the
   class.
 """
+
 from __future__ import annotations
 
 import os
-import sys
 
 # Set offscreen platform BEFORE importing QtWidgets so the QApplication
 # doesn't try to open a real display.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import pytest
 from PySide6.QtWidgets import QApplication
 
 from gui.single_app import SingleApplication, _server_name
@@ -41,6 +40,7 @@ def test_server_name_is_per_user() -> None:
     """Server name includes the username to avoid collisions on shared
     Windows sessions."""
     import getpass
+
     name = _server_name()
     assert name.startswith("tawreed-single-instance-")
     assert getpass.getuser() in name
@@ -50,7 +50,9 @@ def test_module_imports_without_side_effects() -> None:
     """Importing gui.single_app must not start a server, open a socket,
     or otherwise touch the OS. We re-import to confirm."""
     import importlib
+
     import gui.single_app
+
     importlib.reload(gui.single_app)
     # If we get here without exception, the import is clean.
     assert hasattr(gui.single_app, "SingleApplication")

@@ -61,11 +61,13 @@ Issues = "https://github.com/sfkareem/tawreed/issues"
 packages = ["tawreed_app", "gui", "gui.pages", "core"]
 
 [tool.setuptools.package-data]
-# The .qss theme files ship with the wheel.
-"gui.themes" = ["*.qss"]
-# PyInstaller spec lives at the root and shouldn't go in the wheel,
-# but the .png / .ico assets need to.
-"." = ["tawreed_logo*.png", "tawreed_logo.ico"]
+# The .qss theme files ship inside the gui/ package. The key MUST
+# be a top-level package name (setuptools forbids dotted keys in
+# package-data); subpackage data is matched by glob. The PNG/ICO
+# assets live at the repo root and are only consumed at run time
+# from the source tree (or bundled by PyInstaller), so they are
+# intentionally NOT shipped in the wheel.
+"gui" = ["themes/*.qss"]
 
 [tool.pytest.ini_options]
 # Belt-and-braces; tests/pytest.ini also exists for repos that
@@ -74,3 +76,49 @@ testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
+
+# ---------------------------------------------------------------------------
+# Ruff: lint + format (replaces flake8, isort, black, pyupgrade)
+# ---------------------------------------------------------------------------
+# The "select" list picks the rule families we want enforced. We
+# keep it small on purpose — adding a family you don't actually
+# agree with just creates background noise that people ignore.
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+# Don't lint third-party / generated / vendored code.
+extend-exclude = [
+    ".venv",
+    ".venv-test",
+    "build",
+    "dist",
+    "_scripts",  # local Windows build helpers, not in the wheel
+]
+
+[tool.ruff.lint]
+# Start with the high-signal, autofix-friendly rules. F (pyflakes)
+# and UP (pyupgrade) catch real bugs. I (isort) keeps imports
+# clean. B (bugbear) flags common mistakes. We deliberately leave
+# the pylint/pep8-naming families OFF in 0.0.1 — they're noisy
+# and the existing codebase has hundreds of pre-existing violations
+# that we don't want to bulk-fix in a release-blocker PR.
+select = ["F", "I", "B", "UP", "W"]
+ignore = [
+    # Tests have plenty of intentional magic values and
+    # non-snake-case argument names.
+    "B008",  # function call in default argument (pytest fixtures)
+    "UP031", # % formatting in test strings (intentional for clarity)
+]
+# Allow the usual __init__.py + conftest.py to be lax on import order.
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011", "UP033"]  # asserts + f-strings in pytest helpers
+"tawreed_app/__init__.py" = ["F401"]
+
+[tool.ruff.format]
+# Match the existing codebase (we used double quotes + 4-space
+# indent in 0.0.1). When we move to a future version we can flip
+# these; the lock-in here just makes the diff smaller.
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"  # preserve CRLF on Windows, LF on Linux/macOS
+

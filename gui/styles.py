@@ -20,16 +20,16 @@ Legacy alias:
     during the deprecation window still works. Both are loaded once at
     import time.
 """
+
 from __future__ import annotations
 
 import os
 from functools import lru_cache
 
-
 # ----- Colour tokens (Catppuccin Mocha-ish, dark) -----
-COLOR_BG = "#0d0e15"                       # main window background
-COLOR_BG_RAIL = "#0a0b12"                  # nav rail background
-COLOR_BG_CARD = "rgba(20, 21, 33, 0.55)"   # main content card surface (translucent)
+COLOR_BG = "#0d0e15"  # main window background
+COLOR_BG_RAIL = "#0a0b12"  # nav rail background
+COLOR_BG_CARD = "rgba(20, 21, 33, 0.55)"  # main content card surface (translucent)
 COLOR_BG_CARD_ELEV = "rgba(28, 30, 46, 0.7)"  # raised card surface (Card widget)
 COLOR_BG_INPUT = "rgba(255, 255, 255, 0.05)"
 COLOR_BG_INPUT_FOCUS = "rgba(255, 255, 255, 0.08)"
@@ -41,9 +41,9 @@ COLOR_BORDER_INPUT_FOCUS = "#89b4fa"
 COLOR_TEXT = "#e2e4f3"
 COLOR_TEXT_DIM = "#a6adc8"
 COLOR_TEXT_MUTED = "#7f849c"
-COLOR_TEXT_PRIMARY = "#0d0e15"            # text on top of primary buttons
+COLOR_TEXT_PRIMARY = "#0d0e15"  # text on top of primary buttons
 
-COLOR_ACCENT = "#89b4fa"                   # primary blue
+COLOR_ACCENT = "#89b4fa"  # primary blue
 COLOR_ACCENT_HOVER = "#b4befe"
 COLOR_ACCENT_TRANS = "rgba(137, 180, 250, 0.08)"
 COLOR_ACCENT_TRANS_HOVER = "rgba(137, 180, 250, 0.18)"
@@ -51,9 +51,9 @@ COLOR_ACCENT_TRANS_BORDER = "rgba(137, 180, 250, 0.3)"
 COLOR_ACCENT_TRANS_BORDER_HOVER = "rgba(137, 180, 250, 0.5)"
 
 # Semantic status colours (Catppuccin Mocha).
-COLOR_SUCCESS = "#a6e3a1"                  # green
-COLOR_WARNING = "#f9e2af"                  # yellow
-COLOR_ERROR = "#f38ba8"                    # red/pink
+COLOR_SUCCESS = "#a6e3a1"  # green
+COLOR_WARNING = "#f9e2af"  # yellow
+COLOR_ERROR = "#f38ba8"  # red/pink
 
 # Spacing
 RADIUS_SM = 6
@@ -124,14 +124,15 @@ def load_stylesheet(theme: str = "dark") -> str:
     else:
         path = os.path.join(_THEMES_DIR, f"tawreed_{theme}.qss")
 
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         raw = fh.read()
 
-    def _sub(match: "re.Match[str]") -> str:  # type: ignore[name-defined]
+    def _sub(match: re.Match[str]) -> str:  # type: ignore[name-defined]
         token = match.group(1)
         return _TOKEN_MAP.get(token, match.group(0))
 
     import re
+
     return re.sub(r"@([a-z0-9-]+)", _sub, raw)
 
 

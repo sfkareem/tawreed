@@ -1,10 +1,10 @@
 import json
 import logging
 import re
+from datetime import datetime
+
 import httpx
 import openai
-from datetime import datetime
-from typing import List, Dict, Any, Tuple
 
 log = logging.getLogger(__name__)
 
@@ -35,8 +35,8 @@ PROVIDERS = {
         "transport": "openai",
         "label": "OpenAI",
         "hint": "Official OpenAI Chat Completions API (ChatGPT models). "
-                "Uses api.openai.com by default. Click 'Refresh Models' to "
-                "pull the live list from your account.",
+        "Uses api.openai.com by default. Click 'Refresh Models' to "
+        "pull the live list from your account.",
     },
     "Google": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -54,7 +54,7 @@ PROVIDERS = {
         "transport": "openai_compat",
         "label": "Google Gemini",
         "hint": "Uses the OpenAI-compatible Gemini endpoint. "
-                "'Refresh Models' lists everything available on the Google Generative AI API.",
+        "'Refresh Models' lists everything available on the Google Generative AI API.",
     },
     "Claude": {
         "base_url": "https://api.anthropic.com/v1",
@@ -86,10 +86,10 @@ PROVIDERS = {
         "transport": "openai",
         "label": "OpenAI Compatible",
         "hint": "Use this for any OpenAI-protocol service — local servers "
-                "(LM Studio, vLLM, llama.cpp, Ollama) or hosted providers "
-                "(MiniMax, Groq, Together, etc.). Set the Base URL, paste "
-                "an API key if the service requires one, then click "
-                "'Refresh Models' to auto-detect the available models.",
+        "(LM Studio, vLLM, llama.cpp, Ollama) or hosted providers "
+        "(MiniMax, Groq, Together, etc.). Set the Base URL, paste "
+        "an API key if the service requires one, then click "
+        "'Refresh Models' to auto-detect the available models.",
     },
 }
 
@@ -124,6 +124,7 @@ def get_default_settings() -> dict:
         "base_url": p["base_url"],
     }
 
+
 SYSTEM_PROMPT = """
 You are an expert Quantity Surveyor and Construction Estimator.
 Your task is to analyze Bill of Quantities (BOQ) items and categorize each item into a MACRO-LEVEL Work Package (e.g., Concrete Works, Masonry, HVAC, Plumbing, Electrical, Finishes).
@@ -134,15 +135,16 @@ You must return a JSON dictionary where the keys are the corresponding row indic
 Output ONLY valid JSON.
 """
 
+
 class ContentStreamParser:
     def __init__(self):
         self.is_thought = False
         self.buffer = ""
-        
+
     def feed(self, chunk: str):
         self.buffer += chunk
         yields = []
-        
+
         while self.buffer:
             if not self.is_thought:
                 idx = self.buffer.find("<think>")
@@ -151,14 +153,14 @@ class ContentStreamParser:
                         yields.append((self.buffer[:idx], False))
                     yields.append(("<think>", True))
                     self.is_thought = True
-                    self.buffer = self.buffer[idx + 7:]
+                    self.buffer = self.buffer[idx + 7 :]
                 else:
                     partial_len = 0
                     for i in range(1, min(7, len(self.buffer) + 1)):
                         suffix = self.buffer[-i:]
                         if "<think>".startswith(suffix):
                             partial_len = i
-                    
+
                     if partial_len > 0:
                         send_len = len(self.buffer) - partial_len
                         if send_len > 0:
@@ -175,16 +177,20 @@ class ContentStreamParser:
                         yields.append((self.buffer[:idx], True))
                     yields.append(("</think>", False))
                     self.is_thought = False
-                    self.buffer = self.buffer[idx + 8:]
+                    self.buffer = self.buffer[idx + 8 :]
                 else:
                     partial_len = 0
                     for i in range(1, min(8, len(self.buffer) + 1)):
                         suffix = self.buffer[-i:]
                         if "</think>".startswith(suffix):
                             partial_len = i
-                            
+
                     if partial_len > 0:
-                        send_len = len(self.buffer) - self.block_len if (hasattr(self, 'block_len') and self.block_len) else len(self.buffer) - partial_len
+                        send_len = (
+                            len(self.buffer) - self.block_len
+                            if (hasattr(self, "block_len") and self.block_len)
+                            else len(self.buffer) - partial_len
+                        )
                         if send_len > 0:
                             yields.append((self.buffer[:send_len], True))
                             self.buffer = self.buffer[send_len:]
@@ -201,30 +207,31 @@ class ContentStreamParser:
             return [res]
         return []
 
+
 def extract_json_from_text(text: str) -> dict:
     cleaned_text = text.strip()
-    json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', cleaned_text, re.DOTALL)
+    json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned_text, re.DOTALL)
     if json_match:
         json_str = json_match.group(1)
     else:
-        json_match_fallback = re.search(r'(\{.*\})', cleaned_text, re.DOTALL)
+        json_match_fallback = re.search(r"(\{.*\})", cleaned_text, re.DOTALL)
         if json_match_fallback:
             json_str = json_match_fallback.group(1)
         else:
             json_str = cleaned_text
-            
+
     try:
         parsed_data = json.loads(json_str)
     except Exception:
         try:
-            fixed_json_str = re.sub(r',\s*([\]}])', r'\1', json_str)
+            fixed_json_str = re.sub(r",\s*([\]}])", r"\1", json_str)
             parsed_data = json.loads(fixed_json_str)
         except Exception:
             parsed_data = {}
-            
+
     if not isinstance(parsed_data, dict):
         return {}
-        
+
     normalized_data = {}
     for k, v in parsed_data.items():
         k_str = str(k)
@@ -232,12 +239,16 @@ def extract_json_from_text(text: str) -> dict:
             normalized_data["items"] = {str(item_k): str(item_v) for item_k, item_v in v.items()}
         else:
             normalized_data[k_str] = v
-            
+
     return normalized_data
 
+
 def analyze_boq_stream(
-    api_key: str, base_url: str, model_id: str,
-    system_prompt: str, user_prompt: str,
+    api_key: str,
+    base_url: str,
+    model_id: str,
+    system_prompt: str,
+    user_prompt: str,
 ):
     """Stream LLM tokens + the final parsed JSON to the caller.
 
@@ -335,7 +346,8 @@ def analyze_boq_stream(
             # items as an empty dict and surface the mismatch.
             if all(isinstance(v, str) for v in parsed_data.values()):
                 parsed_data["items"] = {
-                    str(k): str(v) for k, v in parsed_data.items()
+                    str(k): str(v)
+                    for k, v in parsed_data.items()
                     if k not in ("project_name", "date")
                 }
             else:
@@ -343,98 +355,102 @@ def analyze_boq_stream(
     parsed_data["error"] = error_msg
     yield ("__DONE__", parsed_data)
 
+
 async def test_connection(provider: str, api_key: str, model: str, base_url: str = "") -> bool:
     try:
         url = base_url if provider == "OpenAI Compatible" else PROVIDERS[provider]["base_url"]
         if not url:
             return False
-            
+
         if provider == "Claude":
             headers = {
                 "x-api-key": api_key,
                 "anthropic-version": "2023-06-01",
-                "content-type": "application/json"
+                "content-type": "application/json",
             }
             data = {
                 "model": model,
                 "max_tokens": 10,
-                "messages": [{"role": "user", "content": "Hello"}]
+                "messages": [{"role": "user", "content": "Hello"}],
             }
             async with httpx.AsyncClient() as client:
-                resp = await client.post(f"{url.rstrip('/')}/messages", headers=headers, json=data, timeout=10.0)
+                resp = await client.post(
+                    f"{url.rstrip('/')}/messages", headers=headers, json=data, timeout=10.0
+                )
                 return resp.status_code == 200
         else:
-            if provider == "OpenAI" and not url.endswith('/v1') and not url.endswith('/v1/'):
+            if provider == "OpenAI" and not url.endswith("/v1") and not url.endswith("/v1/"):
                 url = f"{url.rstrip('/')}/v1"
-                
-            headers = {
-                "Content-Type": "application/json"
-            }
+
+            headers = {"Content-Type": "application/json"}
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
-                
+
             data = {
                 "model": model,
                 "messages": [{"role": "user", "content": "Hello"}],
-                "max_tokens": 10
+                "max_tokens": 10,
             }
             endpoint = f"{url.rstrip('/')}/chat/completions"
             async with httpx.AsyncClient() as client:
                 resp = await client.post(endpoint, headers=headers, json=data, timeout=10.0)
                 return resp.status_code == 200
-    except Exception as e:
+    except Exception:
         log.exception("test_connection exception")
         return False
 
-async def process_boq_batch(items: list, provider: str, api_key: str, model: str, base_url: str = "") -> dict:
+
+async def process_boq_batch(
+    items: list, provider: str, api_key: str, model: str, base_url: str = ""
+) -> dict:
     try:
         items_json = json.dumps({str(i): item for i, item in enumerate(items)}, ensure_ascii=False)
         url = base_url if provider == "OpenAI Compatible" else PROVIDERS[provider]["base_url"]
         if not url:
             return {str(idx): "General" for idx in range(len(items))}
-            
+
         result_text = ""
         if provider == "Claude":
             headers = {
                 "x-api-key": api_key,
                 "anthropic-version": "2023-06-01",
-                "content-type": "application/json"
+                "content-type": "application/json",
             }
             data = {
                 "model": model,
                 "max_tokens": 4096,
                 "system": SYSTEM_PROMPT,
-                "messages": [{"role": "user", "content": f"Categorize these items:\n{items_json}"}]
+                "messages": [{"role": "user", "content": f"Categorize these items:\n{items_json}"}],
             }
             async with httpx.AsyncClient() as client:
-                resp = await client.post(f"{url.rstrip('/')}/messages", headers=headers, json=data, timeout=60.0)
+                resp = await client.post(
+                    f"{url.rstrip('/')}/messages", headers=headers, json=data, timeout=60.0
+                )
                 resp.raise_for_status()
                 result_text = resp.json()["content"][0]["text"]
         else:
-            if provider == "OpenAI" and not url.endswith('/v1') and not url.endswith('/v1/'):
+            if provider == "OpenAI" and not url.endswith("/v1") and not url.endswith("/v1/"):
                 url = f"{url.rstrip('/')}/v1"
-                
-            headers = {
-                "Content-Type": "application/json"
-            }
+
+            headers = {"Content-Type": "application/json"}
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
-                
+
             data = {
                 "model": model,
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": f"Categorize these items:\n{items_json}"}
+                    {"role": "user", "content": f"Categorize these items:\n{items_json}"},
                 ],
                 "temperature": 0.0,
-                "response_format": {"type": "json_object"} if provider != "Claude" else None
+                "response_format": {"type": "json_object"} if provider != "Claude" else None,
             }
             endpoint = f"{url.rstrip('/')}/chat/completions"
             async with httpx.AsyncClient() as client:
                 resp = await client.post(endpoint, headers=headers, json=data, timeout=60.0)
                 resp.raise_for_status()
                 result_text = resp.json()["choices"][0]["message"]["content"]
-                
+
         parsed_data = extract_json_from_text(result_text)
         if parsed_data:
             if "items" in parsed_data and isinstance(parsed_data["items"], dict):
@@ -444,7 +460,7 @@ async def process_boq_batch(items: list, provider: str, api_key: str, model: str
             return {str(k): str(v) for k, v in items_dict.items()}
         else:
             return {str(idx): "General" for idx in range(len(items))}
-            
-    except Exception as e:
+
+    except Exception:
         log.exception("Error in process_boq_batch")
         return {str(idx): "General" for idx in range(len(items))}

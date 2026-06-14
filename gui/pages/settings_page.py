@@ -11,27 +11,36 @@ Senior design choices:
 - API key field is masked but has a "show" toggle so the user can
   verify what they typed without re-typing it.
 """
+
 from __future__ import annotations
 
 import asyncio
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLabel, QPushButton, QLineEdit, QComboBox, QMessageBox,
-    QCheckBox, QSizePolicy,
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QSettings
 
 from core import db
+from core import reset as reset_mod
 from core.ai import (
-    get_provider_names,
     get_provider_config,
+    get_provider_names,
     is_valid_provider,
 )
 from core.model_catalog import fetch_models
-from core import reset as reset_mod
+from gui.widgets import Card, PageHeader, StatusPill
 from gui.worker import check_connection
-from gui.widgets import Card, PageHeader, Section, StatusPill
 
 
 class SettingsPage(QWidget):
@@ -50,11 +59,13 @@ class SettingsPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
 
-        layout.addWidget(PageHeader(
-            "Settings",
-            "Configure the LLM provider used to categorize BOQ items. "
-            "Switching providers automatically updates the model list and base URL.",
-        ))
+        layout.addWidget(
+            PageHeader(
+                "Settings",
+                "Configure the LLM provider used to categorize BOQ items. "
+                "Switching providers automatically updates the model list and base URL.",
+            )
+        )
 
         # ----- Provider card -----
         provider_card = Card("LLM Provider")
@@ -169,9 +180,7 @@ class SettingsPage(QWidget):
             # Set the provider hint to match the loaded provider so
             # the user sees the right guidance on first render (not
             # only after they pick a different provider).
-            self.provider_hint.setText(
-                get_provider_config(provider).get("hint", "")
-            )
+            self.provider_hint.setText(get_provider_config(provider).get("hint", ""))
             # _on_provider_changed populates the model combo; we then
             # override it with the saved value if the saved model is
             # no longer in the curated list.
@@ -190,7 +199,8 @@ class SettingsPage(QWidget):
         cfg = get_provider_config(provider)
         if cfg.get("requires_base_url") and not base_url:
             QMessageBox.warning(
-                self, "Base URL required",
+                self,
+                "Base URL required",
                 f"The '{cfg.get('label', provider)}' provider requires a Base URL.",
             )
             return
@@ -276,13 +286,15 @@ class SettingsPage(QWidget):
         cfg = get_provider_config(provider)
         if cfg.get("requires_base_url") and not base_url:
             QMessageBox.warning(
-                self, "Base URL required",
+                self,
+                "Base URL required",
                 f"Enter a Base URL before refreshing '{cfg.get('label', provider)}' models.",
             )
             return
         if not api_key:
             QMessageBox.warning(
-                self, "API key required",
+                self,
+                "API key required",
                 "Enter an API key so we can fetch the live model list.",
             )
             return
@@ -297,9 +309,7 @@ class SettingsPage(QWidget):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-        task = loop.create_task(
-            fetch_models(provider, api_key=api_key, base_url=base_url)
-        )
+        task = loop.create_task(fetch_models(provider, api_key=api_key, base_url=base_url))
 
         def on_done(future):
             self.refresh_btn.setEnabled(True)
@@ -340,12 +350,15 @@ class SettingsPage(QWidget):
         cfg = get_provider_config(provider)
         if cfg.get("requires_base_url") and not base_url:
             QMessageBox.warning(
-                self, "Base URL required",
+                self,
+                "Base URL required",
                 f"Enter a Base URL before testing '{cfg.get('label', provider)}'.",
             )
             return
         if not api_key:
-            QMessageBox.warning(self, "API key required", "Enter an API key to test the connection.")
+            QMessageBox.warning(
+                self, "API key required", "Enter an API key to test the connection."
+            )
             return
         if not model:
             QMessageBox.warning(self, "Model required", "Pick or type a model name first.")
@@ -362,9 +375,7 @@ class SettingsPage(QWidget):
             asyncio.set_event_loop(loop)
 
         task = loop.create_task(
-            asyncio.to_thread(
-                check_connection, provider, api_key, base_url, model
-            )
+            asyncio.to_thread(check_connection, provider, api_key, base_url, model)
         )
 
         def on_done(future):
@@ -382,7 +393,8 @@ class SettingsPage(QWidget):
             else:
                 self.status_label.setText("✗ Connection failed. Check key, URL, and model.")
                 QMessageBox.critical(
-                    self, "Connection failed",
+                    self,
+                    "Connection failed",
                     "Could not reach the API. Verify the key, base URL, and model name.",
                 )
 
@@ -410,6 +422,7 @@ class SettingsPage(QWidget):
 
         # Second gate: type the word "RESET" to confirm.
         from PySide6.QtWidgets import QInputDialog
+
         phrase, ok = QInputDialog.getText(
             self,
             "Type RESET to confirm",
@@ -432,6 +445,7 @@ class SettingsPage(QWidget):
         self._populate_models_for_provider(self.provider_combo.currentData() or "OpenAI")
         self.status_label.setText("✓ Everything reset.")
         QMessageBox.information(
-            self, "Reset complete",
+            self,
+            "Reset complete",
             f"Tawreed has been reset.\n\n{report.human_summary()}",
         )

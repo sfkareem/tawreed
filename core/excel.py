@@ -37,19 +37,19 @@ Output formatting (write_excel):
   frozen header panes, currency-formatted Amounts, alternating
   row stripes, and proper borders. See ``_style_*`` helpers.
 """
+
+import errno
+import logging
 import os
 import re
-import sys
-import errno
-import inspect
-import logging
-import zipfile
 import unicodedata
+import zipfile
+from typing import Any
+
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.exceptions import InvalidFileException
-from typing import Any, Tuple, Dict, List, Optional
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ OUTPUT_FONT_SIZE = 11
 # is the user-requested 60 — long descriptions still render
 # correctly because wrap_text is on. Other columns are sized
 # based on their typical content (numbers, units, dates).
-COL_WIDTH_DESC = 60      # user spec
+COL_WIDTH_DESC = 60  # user spec
 COL_WIDTH_NR = 8
 COL_WIDTH_UNIT = 14
 COL_WIDTH_QTY = 10
@@ -93,27 +93,27 @@ COL_WIDTH_PACKAGE = 28
 
 # Header row uses a calm grey fill + bold text — readable but not
 # loud. Per skill: avoid pure black headers, prefer dark grey.
-HEADER_FILL_HEX = "FF1F2937"   # slate-800
-HEADER_FONT_HEX = "FFFFFFFF"   # white
+HEADER_FILL_HEX = "FF1F2937"  # slate-800
+HEADER_FONT_HEX = "FFFFFFFF"  # white
 HEADER_FONT_SIZE = 11
 
 # Alternating row stripes (zebra striping) for body rows. Pale,
 # neutral — don't compete with the data.
-ZEBRA_FILL_HEX = "FFF8FAFC"   # slate-50
-BODY_FONT_HEX = "FF1F2937"    # slate-800 for body text
+ZEBRA_FILL_HEX = "FFF8FAFC"  # slate-50
+BODY_FONT_HEX = "FF1F2937"  # slate-800 for body text
 
 # Borders. Thin, light grey. Don't make the workbook look like
 # a tax form.
-BORDER_HEX = "FFD1D5DB"       # grey-300
+BORDER_HEX = "FFD1D5DB"  # grey-300
 BORDER_STYLE = "thin"
 
 # Number formats. The Amount column is currency (no symbol, just
 # thousand separators — the BOQ market in MENA uses EGP, USD, etc.
 # inconsistently, so we let the source-data Rate dictate the unit).
 FMT_INT = "#,##0"
-FMT_QTY = "#,##0.##"          # qty can be 0.5 m² etc.
-FMT_RATE = "#,##0.00"         # rate is money
-FMT_AMOUNT = "#,##0.00"       # amount is money
+FMT_QTY = "#,##0.##"  # qty can be 0.5 m² etc.
+FMT_RATE = "#,##0.00"  # rate is money
+FMT_AMOUNT = "#,##0.00"  # amount is money
 
 
 def _column_width(text: Any, cap: int, pad: int = 2) -> int:
@@ -161,46 +161,118 @@ def _thin_border() -> Border:
 # as nr only, because in BOQ spreadsheets "بند" is almost always
 # the row-number column, not a free-text description column).
 
-_HEADER_LABELS: Dict[str, List[str]] = {
+_HEADER_LABELS: dict[str, list[str]] = {
     # Row number / item id column.
     "no": [
-        "nr", "no.", "no ", "no)", "no:", "number", "#", "item no",
-        "بنـد", "بنود", "بند", "رقم", "رقـم", "الرقم", "مسلسل",
-        "البنود", "البند",
+        "nr",
+        "no.",
+        "no ",
+        "no)",
+        "no:",
+        "number",
+        "#",
+        "item no",
+        "بنـد",
+        "بنود",
+        "بند",
+        "رقم",
+        "رقـم",
+        "الرقم",
+        "مسلسل",
+        "البنود",
+        "البند",
         # French (common in MENA construction)
-        "n°", "no.",
+        "n°",
+        "no.",
     ],
     # Item description / free-text column.
     "desc": [
-        "description", "desc", "item description", "item desc",
-        "scope", "scope of work", "item", "work item",
-        "بيان", "بيـان", "البيـان", "البيان", "وصف", "الوصف",
-        "بيان الأعمال", "وصف الأعمال", "بيان البند",
+        "description",
+        "desc",
+        "item description",
+        "item desc",
+        "scope",
+        "scope of work",
+        "item",
+        "work item",
+        "بيان",
+        "بيـان",
+        "البيـان",
+        "البيان",
+        "وصف",
+        "الوصف",
+        "بيان الأعمال",
+        "وصف الأعمال",
+        "بيان البند",
     ],
     # Unit column.
     "unit": [
-        "unit", "uom", "units",
-        "وحدة", "وحـدة", "الوحدة", "الوحـدة", "وحده", "الوحده",
+        "unit",
+        "uom",
+        "units",
+        "وحدة",
+        "وحـدة",
+        "الوحدة",
+        "الوحـدة",
+        "وحده",
+        "الوحده",
     ],
     # Quantity column.
     "qty": [
-        "qty", "quantity", "qty.", "q'ty", "q-ty", "quantities",
-        "كمية", "الكميـة", "الكميه", "الكمية", "الكمـية", "كميه", "الكمـيه",
+        "qty",
+        "quantity",
+        "qty.",
+        "q'ty",
+        "q-ty",
+        "quantities",
+        "كمية",
+        "الكميـة",
+        "الكميه",
+        "الكمية",
+        "الكمـية",
+        "كميه",
+        "الكمـيه",
     ],
     # Rate / unit price column.
     "rate": [
-        "rate", "unit rate", "unit price", "price", "unit cost",
-        "unitrate", "unitprice",
-        "سعر", "السعر", "سعر الوحدة", "سعر الوحده", "سعر الوحد",
-        "فئـة", "فئه", "الفئـة", "الفئه", "فئة", "الفئة",
+        "rate",
+        "unit rate",
+        "unit price",
+        "price",
+        "unit cost",
+        "unitrate",
+        "unitprice",
+        "سعر",
+        "السعر",
+        "سعر الوحدة",
+        "سعر الوحده",
+        "سعر الوحد",
+        "فئـة",
+        "فئه",
+        "الفئـة",
+        "الفئه",
+        "فئة",
+        "الفئة",
     ],
     # Total / amount column.
     "total": [
-        "total", "amount", "total amount", "total price", "total cost",
-        "value", "tot.",
-        "إجمالي", "الاجمالي", "الإجمالي", "الاجمـالي",
-        "اجمالي", "إجمـالي",
-        "مبلغ", "المبلغ", "القيمة", "القيمـة",
+        "total",
+        "amount",
+        "total amount",
+        "total price",
+        "total cost",
+        "value",
+        "tot.",
+        "إجمالي",
+        "الاجمالي",
+        "الإجمالي",
+        "الاجمـالي",
+        "اجمالي",
+        "إجمـالي",
+        "مبلغ",
+        "المبلغ",
+        "القيمة",
+        "القيمـة",
     ],
 }
 
@@ -218,7 +290,7 @@ def _clean(s: Any) -> str:
     return re.sub(r"\s+", " ", str(s)).strip().lower()
 
 
-def _score_column(header_text: str) -> Dict[str, int]:
+def _score_column(header_text: str) -> dict[str, int]:
     """Return a {label_key: score} dict for one header cell.
 
     Score is the number of distinct keywords from ``_HEADER_LABELS``
@@ -228,7 +300,7 @@ def _score_column(header_text: str) -> Dict[str, int]:
     to the more "specific" interpretation.
     """
     h = _clean(header_text)
-    out: Dict[str, int] = {}
+    out: dict[str, int] = {}
     for key, kws in _HEADER_LABELS.items():
         # Only count ONE match per label so a column with two qty-
         # related words doesn't double-count. We just want a binary
@@ -240,7 +312,7 @@ def _score_column(header_text: str) -> Dict[str, int]:
     return out
 
 
-def detect_columns(header_cells: List[Any]) -> Dict[str, int]:
+def detect_columns(header_cells: list[Any]) -> dict[str, int]:
     """Given a list of header cell values (one per column), return
     a mapping of logical column name to 0-indexed column offset.
 
@@ -252,7 +324,7 @@ def detect_columns(header_cells: List[Any]) -> Dict[str, int]:
     Returns a partial mapping — a column may not match any label and
     gets ignored.
     """
-    candidates: List[Tuple[int, str, int]] = []  # (col_idx, label, score)
+    candidates: list[tuple[int, str, int]] = []  # (col_idx, label, score)
     for c_idx, val in enumerate(header_cells):
         scores = _score_column(val)
         for label, score in scores.items():
@@ -269,7 +341,7 @@ def detect_columns(header_cells: List[Any]) -> Dict[str, int]:
 
     taken_cols: set[int] = set()
     taken_labels: set[str] = set()
-    result: Dict[str, int] = {}
+    result: dict[str, int] = {}
     for c_idx, label, _ in candidates:
         if c_idx in taken_cols or label in taken_labels:
             continue
@@ -279,7 +351,7 @@ def detect_columns(header_cells: List[Any]) -> Dict[str, int]:
     return result
 
 
-def parse_excel(file_path: str) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
+def parse_excel(file_path: str) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """Parse an input Excel file, returning markdown + data + headers.
 
     The output ``data_mapping`` uses the canonical English key names
@@ -295,9 +367,7 @@ def parse_excel(file_path: str) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
         FileNotFoundError: if the path doesn't exist.
     """
     if not os.path.exists(file_path):
-        raise FileNotFoundError(
-            f"Excel file not found: {file_path}"
-        )
+        raise FileNotFoundError(f"Excel file not found: {file_path}")
     try:
         wb = openpyxl.load_workbook(file_path, data_only=True)
     except (InvalidFileException, zipfile.BadZipFile) as e:
@@ -319,24 +389,24 @@ def parse_excel(file_path: str) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
                 f"Cannot read '{os.path.basename(file_path)}' — "
                 f"the file is locked. Close it in Excel and try again."
             ) from e
-        raise ValueError(
-            f"Cannot read '{os.path.basename(file_path)}': {e}"
-        ) from e
+        raise ValueError(f"Cannot read '{os.path.basename(file_path)}': {e}") from e
 
-    markdown_parts: List[str] = []
-    data_mapping: Dict[str, Any] = {}
-    headers_mapping: Dict[str, Any] = {}
+    markdown_parts: list[str] = []
+    data_mapping: dict[str, Any] = {}
+    headers_mapping: dict[str, Any] = {}
 
     global_id_counter = 1
 
     for sheet in wb.worksheets:
         # Find header row by scanning up to 50 rows.
-        header_row_idx: Optional[int] = None
-        mapped_cols: Dict[str, int] = {}
+        header_row_idx: int | None = None
+        mapped_cols: dict[str, int] = {}
 
         for r_idx in range(1, min(51, sheet.max_row + 1)):
-            row_vals = [sheet.cell(row=r_idx, column=c_idx).value
-                        for c_idx in range(1, sheet.max_column + 1)]
+            row_vals = [
+                sheet.cell(row=r_idx, column=c_idx).value
+                for c_idx in range(1, sheet.max_column + 1)
+            ]
             if all(v is None for v in row_vals):
                 continue
 
@@ -354,7 +424,7 @@ def parse_excel(file_path: str) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
             continue
 
         # Collect pre-header metadata (project name, sheet title, etc.)
-        pre_header_rows: List[str] = []
+        pre_header_rows: list[str] = []
         for r_idx in range(1, header_row_idx):
             row_vals = [
                 str(sheet.cell(row=r_idx, column=c).value).strip()
@@ -383,7 +453,7 @@ def parse_excel(file_path: str) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
         }
 
         # Build markdown table header.
-        sheet_md: List[str] = [f"## Worksheet: {sheet.title}"]
+        sheet_md: list[str] = [f"## Worksheet: {sheet.title}"]
         if metadata_str:
             sheet_md.append(f"**Metadata**: {metadata_str}\n")
         sheet_md.append("| Global ID | Nr. | Item Description | Unit | Qty | Rate | Amount |")
@@ -391,16 +461,24 @@ def parse_excel(file_path: str) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
 
         # Parse data rows.
         for r_idx in range(header_row_idx + 1, sheet.max_row + 1):
-            row_cells = [sheet.cell(row=r_idx, column=c).value
-                         for c in range(1, sheet.max_column + 1)]
+            row_cells = [
+                sheet.cell(row=r_idx, column=c).value for c in range(1, sheet.max_column + 1)
+            ]
             if all(v is None or str(v).strip() == "" for v in row_cells):
                 continue
 
-            def _cell(key: str) -> Any:
-                idx = mapped_cols.get(key)
-                if idx is None or idx >= len(row_cells):
+            # Bind loop variables as default args so the inner
+            # function captures *this iteration's* values, not
+            # the last iteration's. (B023 guard.)
+            def _cell(
+                key: str,
+                _cols: dict = mapped_cols,
+                _cells: list = row_cells,
+            ) -> Any:
+                idx = _cols.get(key)
+                if idx is None or idx >= len(_cells):
                     return None
-                return row_cells[idx]
+                return _cells[idx]
 
             desc_val = _cell("desc")
             if desc_val is None or str(desc_val).strip() == "":
@@ -484,7 +562,7 @@ def parse_excel(file_path: str) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
 
 def sanitize_sheet_name(name: str) -> str:
     """Sanitize sheet name to remove invalid characters and limit length to 31 chars."""
-    sanitized = re.sub(r'[\[\]\*\\\/\?\:]', '', name)
+    sanitized = re.sub(r"[\[\]\*\\\/\?\:]", "", name)
     sanitized = sanitized.strip()
     if not sanitized:
         sanitized = "General"
@@ -495,8 +573,8 @@ def sanitize_sheet_name(name: str) -> str:
 
 def _style_worksheet(
     ws,
-    headers: List[str],
-    items: List[Dict[str, Any]],
+    headers: list[str],
+    items: list[dict[str, Any]],
     sheet_title: str,
     desc_idx: int,
 ) -> None:
@@ -511,19 +589,30 @@ def _style_worksheet(
     count is large.
     """
     thin = _thin_border()
-    header_font = Font(name=OUTPUT_FONT_NAME, size=HEADER_FONT_SIZE, bold=True, color=HEADER_FONT_HEX)
-    header_fill = PatternFill(start_color=HEADER_FILL_HEX, end_color=HEADER_FILL_HEX, fill_type="solid")
+    header_font = Font(
+        name=OUTPUT_FONT_NAME, size=HEADER_FONT_SIZE, bold=True, color=HEADER_FONT_HEX
+    )
+    header_fill = PatternFill(
+        start_color=HEADER_FILL_HEX, end_color=HEADER_FILL_HEX, fill_type="solid"
+    )
     body_font = Font(name=OUTPUT_FONT_NAME, size=OUTPUT_FONT_SIZE, color=BODY_FONT_HEX)
-    zebra_fill = PatternFill(start_color=ZEBRA_FILL_HEX, end_color=ZEBRA_FILL_HEX, fill_type="solid")
+    zebra_fill = PatternFill(
+        start_color=ZEBRA_FILL_HEX, end_color=ZEBRA_FILL_HEX, fill_type="solid"
+    )
 
     # Column widths. We do the header first, then sample the body
     # so the cap actually has a chance to engage (the body of the
     # longest description, not the first row, is what was making
     # the column blow up to 800+ in the old version).
     col_caps = {
-        1: COL_WIDTH_NR, 2: COL_WIDTH_DESC, 3: COL_WIDTH_UNIT,
-        4: COL_WIDTH_QTY, 5: COL_WIDTH_RATE, 6: COL_WIDTH_AMOUNT,
-        7: COL_WIDTH_SHEET, 8: COL_WIDTH_PACKAGE,
+        1: COL_WIDTH_NR,
+        2: COL_WIDTH_DESC,
+        3: COL_WIDTH_UNIT,
+        4: COL_WIDTH_QTY,
+        5: COL_WIDTH_RATE,
+        6: COL_WIDTH_AMOUNT,
+        7: COL_WIDTH_SHEET,
+        8: COL_WIDTH_PACKAGE,
     }
     n_cols = max(len(headers), max((len(_to_list(it)) for it in items), default=0))
     for c in range(1, n_cols + 1):
@@ -554,9 +643,8 @@ def _style_worksheet(
 
     # Body rows. Apply borders, font, alignment, number format,
     # and zebra stripes.
-    num_rows = len(items)
     for r_idx, item in enumerate(items, start=2):
-        is_zebra = (r_idx % 2 == 0)
+        is_zebra = r_idx % 2 == 0
         vals = _to_list(item)
         for c_idx in range(1, n_cols + 1):
             v = vals[c_idx - 1] if c_idx - 1 < len(vals) else None
@@ -615,7 +703,7 @@ def _style_worksheet(
         pass
 
 
-def _to_list(item: Any) -> List[Any]:
+def _to_list(item: Any) -> list[Any]:
     """Normalise a row into a flat list of values for cell access.
 
     Items may be plain dicts (the parsed row shape) or anything
@@ -643,7 +731,6 @@ def _to_list(item: Any) -> List[Any]:
 
 def _style_cover(ws, project_name: str, date: str) -> None:
     """Render the Cover sheet: title + project name + date + summary block."""
-    title_font = Font(name=OUTPUT_FONT_NAME, size=22, bold=True, color="FF1F2937")
     label_font = Font(name=OUTPUT_FONT_NAME, size=11, bold=True, color="FF374151")
     value_font = Font(name=OUTPUT_FONT_NAME, size=11, color="FF1F2937")
     thin = _thin_border()
@@ -688,8 +775,12 @@ def _style_cover(ws, project_name: str, date: str) -> None:
 
 
 def write_excel(
-    output_path: str, row_mapping: dict, item_categories: dict,
-    project_name: str, date: str, layout_style: str = "root",
+    output_path: str,
+    row_mapping: dict,
+    item_categories: dict,
+    project_name: str,
+    date: str,
+    layout_style: str = "root",
 ) -> None:
     """Generate the deliverable Excel workbook.
 
@@ -711,13 +802,12 @@ def write_excel(
     _style_cover(ws_cover, project_name, date)
 
     # ---- Package sheets --------------------------------------------------
-    grouped_items: Dict[str, list] = {}
+    grouped_items: dict[str, list] = {}
     for g_id, row_data in row_mapping.items():
         cat = item_categories.get(g_id, "General") or "General"
         grouped_items.setdefault(cat, []).append(row_data)
 
     created_sheets = {"Cover"}
-    sheet_index = 1
     headers = ["Nr.", "Item Description", "Unit", "Qty", "Rate", "Amount"]
 
     for cat_name, items in grouped_items.items():
@@ -746,7 +836,8 @@ def write_excel(
 
     has_sheet = any(
         isinstance(it, dict) and "sheet_name" in it
-        for items in grouped_items.values() for it in items
+        for items in grouped_items.values()
+        for it in items
     )
     master_headers = list(headers)
     if has_sheet:
@@ -754,7 +845,7 @@ def write_excel(
     master_headers.append("Package")
 
     # Build flat list of master rows (raw values, formulas applied in style pass).
-    master_rows: List[List[Any]] = []
+    master_rows: list[list[Any]] = []
     for cat_name, items in grouped_items.items():
         for item in items:
             vals = _to_list(item)
@@ -775,7 +866,7 @@ def write_excel(
         # The most common cause: the user has the file open in Excel,
         # which takes an exclusive write lock on Windows.
         log.exception("write_excel: permission denied writing %s", output_path)
-        raise IOError(
+        raise OSError(
             f"Cannot write '{os.path.basename(output_path)}' — "
             f"the file is open in Excel or another program has it locked. "
             f"Close it and try again."
@@ -783,9 +874,7 @@ def write_excel(
     except OSError as e:
         # Disk full, path too long, network share offline, etc.
         log.exception("write_excel: OS error writing %s", output_path)
-        raise IOError(
-            f"Cannot write '{os.path.basename(output_path)}': {e}"
-        ) from e
+        raise OSError(f"Cannot write '{os.path.basename(output_path)}': {e}") from e
 
 
 def parse_excel_boq(file_path: str) -> tuple[str, dict, dict]:
@@ -793,6 +882,8 @@ def parse_excel_boq(file_path: str) -> tuple[str, dict, dict]:
     return parse_excel(file_path)
 
 
-def generate_output_excel(project_name: str, date: str, row_mapping: dict, item_categories: dict, output_path: str) -> None:
+def generate_output_excel(
+    project_name: str, date: str, row_mapping: dict, item_categories: dict, output_path: str
+) -> None:
     """Wrapper function for compatibility with root test_core.py."""
     return write_excel(output_path, row_mapping, item_categories, project_name, date)

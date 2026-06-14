@@ -24,9 +24,10 @@ Thread safety
 - The translations dict is read-only at runtime, so no lock is
   needed on the read path.
 """
+
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, QLocale, Signal
+from PySide6.QtCore import QLocale, QObject, Signal
 
 SUPPORTED_LANGUAGES = ("en", "ar")
 

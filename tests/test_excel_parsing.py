@@ -14,6 +14,7 @@ header (`بند | بيان الأعمال | الوحدة | الكمية | الف
 actual data rows have the Arabic description text in the
 "Item Description" field (not the row number).
 """
+
 from __future__ import annotations
 
 import os
@@ -26,7 +27,6 @@ import pytest
 # conftest.py handles the project-root sys.path insertion and the
 # Qt offscreen platform setup. See tests/conftest.py.
 from core import excel  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # detect_columns
@@ -94,11 +94,15 @@ def test_detect_no_match_returns_empty():
 # TAWREED_TEST_BOQ env var so we don't commit a path that doesn't
 # exist on every developer's machine. Set in your shell before
 # running pytest if you have a real BOQ to test against.
-REAL_BOQ = Path(os.environ.get("TAWREED_TEST_BOQ", "")) if os.environ.get("TAWREED_TEST_BOQ") else None
+REAL_BOQ = (
+    Path(os.environ.get("TAWREED_TEST_BOQ", "")) if os.environ.get("TAWREED_TEST_BOQ") else None
+)
 
 
-@pytest.mark.skipif(not (REAL_BOQ and REAL_BOQ.is_file()),
-                    reason="Set TAWREED_TEST_BOQ to a real BOQ path to run this test")
+@pytest.mark.skipif(
+    not (REAL_BOQ and REAL_BOQ.is_file()),
+    reason="Set TAWREED_TEST_BOQ to a real BOQ path to run this test",
+)
 def test_real_arabic_boq_columns_aligned():
     """End-to-end: parse the real file, verify each row's data ends
     up in the right cell. This is the regression test for the
@@ -112,7 +116,7 @@ def test_real_arabic_boq_columns_aligned():
     arabic_desc_found = False
     for g_id, row in data.items():
         desc = row.get("Item Description", "")
-        if any("\u0600" <= c <= "\u06FF" for c in desc) and len(desc) > 5:
+        if any("\u0600" <= c <= "\u06ff" for c in desc) and len(desc) > 5:
             # The description must NOT be just a row number.
             assert not desc.strip().isdigit(), (
                 f"Row {g_id}: Arabic description slot contains a number "
@@ -142,7 +146,9 @@ def test_output_path_is_under_home_tawreed(monkeypatch):
 
     # Reload core.db so it picks up the new expanduser.
     import importlib
+
     import core.db as db
+
     importlib.reload(db)
 
     assert db.TAWREED_DIR == str(fake_home / ".tawreed")
@@ -169,14 +175,18 @@ def test_output_path_is_identical_for_frozen_and_dev(monkeypatch):
     monkeypatch.setattr(os.path, "expanduser", lambda p: str(fake_home) if p == "~" else p)
 
     # Simulate frozen: sys.frozen=True, sys.executable somewhere weird.
-    fake_exe = fake_home / "Desktop" / "QS Mind" / "tawreed-api" / "dist" / "Tawreed" / "Tawreed.exe"
+    fake_exe = (
+        fake_home / "Desktop" / "QS Mind" / "tawreed-api" / "dist" / "Tawreed" / "Tawreed.exe"
+    )
     fake_exe.parent.mkdir(parents=True, exist_ok=True)
     fake_exe.write_text("")
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(fake_exe), raising=False)
 
     import importlib
+
     import core.db as db_frozen
+
     importlib.reload(db_frozen)
     frozen_path = db_frozen.TAWREED_DIR
 
@@ -198,7 +208,8 @@ def test_output_path_is_identical_for_frozen_and_dev(monkeypatch):
 def test_write_then_read_preserves_arabic(tmp_path):
     """A roundtrip through write_excel preserves the Arabic text
     in the description column (no cp437/cp1252 mojibake regression)."""
-    from core.excel import write_excel, parse_excel
+    from core.excel import write_excel
+
     out = tmp_path / "out.xlsx"
     row_mapping = {
         "R1": {
@@ -210,19 +221,23 @@ def test_write_then_read_preserves_arabic(tmp_path):
             "Amount": 0,
             "sheet_name": "Test",
             "original_values": {
-                "Nr.": "1", "nr": "1",
+                "Nr.": "1",
+                "nr": "1",
                 "Item Description": "نظام الإنذار المعنون ضد الحريق",
                 "description": "نظام الإنذار المعنون ضد الحريق",
-                "Unit": "نظام", "unit": "نظام",
-                "Qty": 1.0, "qty": 1.0,
-                "Rate": 1000.0, "rate": 1000.0,
-                "Amount": 0, "amount": 0,
+                "Unit": "نظام",
+                "unit": "نظام",
+                "Qty": 1.0,
+                "qty": 1.0,
+                "Rate": 1000.0,
+                "rate": 1000.0,
+                "Amount": 0,
+                "amount": 0,
             },
         },
     }
     item_categories = {"R1": "Fire Alarm"}
-    write_excel(str(out), row_mapping, item_categories,
-                project_name="اختبار", date="2026-06-13")
+    write_excel(str(out), row_mapping, item_categories, project_name="اختبار", date="2026-06-13")
 
     # Read back and verify the description cell holds Arabic.
     wb = openpyxl.load_workbook(str(out), data_only=False)
@@ -240,7 +255,8 @@ def test_write_excel_caps_description_column_width(tmp_path):
     Arabic description widened the description column to ~810.
     The new code caps the column at the user-requested width
     (60) so the spreadsheet actually looks usable."""
-    from core.excel import write_excel, COL_WIDTH_DESC
+    from core.excel import COL_WIDTH_DESC, write_excel
+
     out = tmp_path / "caps.xlsx"
     long_arabic = "وصف طويل " * 200  # ~2000 chars
     row_mapping = {
@@ -252,19 +268,23 @@ def test_write_excel_caps_description_column_width(tmp_path):
             "Rate": 1000.0,
             "Amount": 0,
             "original_values": {
-                "Nr.": "1", "nr": "1",
+                "Nr.": "1",
+                "nr": "1",
                 "Item Description": long_arabic,
                 "description": long_arabic,
-                "Unit": "نظام", "unit": "نظام",
-                "Qty": 1.0, "qty": 1.0,
-                "Rate": 1000.0, "rate": 1000.0,
-                "Amount": 0, "amount": 0,
+                "Unit": "نظام",
+                "unit": "نظام",
+                "Qty": 1.0,
+                "qty": 1.0,
+                "Rate": 1000.0,
+                "rate": 1000.0,
+                "Amount": 0,
+                "amount": 0,
             },
         },
     }
     item_categories = {"R1": "Test"}
-    write_excel(str(out), row_mapping, item_categories,
-                project_name="اختبار", date="2026-06-13")
+    write_excel(str(out), row_mapping, item_categories, project_name="اختبار", date="2026-06-13")
 
     wb = openpyxl.load_workbook(str(out), data_only=False)
     pkg = next(s for s in wb.sheetnames if s.startswith("Pkg"))
@@ -280,6 +300,7 @@ def test_write_excel_freezes_header_row(tmp_path):
     """Frozen panes must be set to A2 so the header row stays
     visible while scrolling."""
     from core.excel import write_excel
+
     out = tmp_path / "frozen.xlsx"
     row_mapping = {
         "R1": {
@@ -290,18 +311,23 @@ def test_write_excel_freezes_header_row(tmp_path):
             "Rate": 1.0,
             "Amount": 0,
             "original_values": {
-                "Nr.": "1", "nr": "1",
-                "Item Description": "x", "description": "x",
-                "Unit": "u", "unit": "u",
-                "Qty": 1.0, "qty": 1.0,
-                "Rate": 1.0, "rate": 1.0,
-                "Amount": 0, "amount": 0,
+                "Nr.": "1",
+                "nr": "1",
+                "Item Description": "x",
+                "description": "x",
+                "Unit": "u",
+                "unit": "u",
+                "Qty": 1.0,
+                "qty": 1.0,
+                "Rate": 1.0,
+                "rate": 1.0,
+                "Amount": 0,
+                "amount": 0,
             },
         },
     }
     item_categories = {"R1": "Cat"}
-    write_excel(str(out), row_mapping, item_categories,
-                project_name="p", date="2026-01-01")
+    write_excel(str(out), row_mapping, item_categories, project_name="p", date="2026-01-01")
     wb = openpyxl.load_workbook(str(out), data_only=False)
     pkg = next(s for s in wb.sheetnames if s.startswith("Pkg"))
     ws = wb[pkg]
@@ -312,6 +338,7 @@ def test_write_excel_amount_is_formula(tmp_path):
     """The Amount cell must be a formula (=D*E), not a hardcoded
     value. Per Anthropic xlsx skill: formulas, not hardcodes."""
     from core.excel import write_excel
+
     out = tmp_path / "formula.xlsx"
     row_mapping = {
         "R1": {
@@ -322,18 +349,23 @@ def test_write_excel_amount_is_formula(tmp_path):
             "Rate": 3.5,
             "Amount": 0,
             "original_values": {
-                "Nr.": "1", "nr": "1",
-                "Item Description": "x", "description": "x",
-                "Unit": "u", "unit": "u",
-                "Qty": 2.0, "qty": 2.0,
-                "Rate": 3.5, "rate": 3.5,
-                "Amount": 0, "amount": 0,
+                "Nr.": "1",
+                "nr": "1",
+                "Item Description": "x",
+                "description": "x",
+                "Unit": "u",
+                "unit": "u",
+                "Qty": 2.0,
+                "qty": 2.0,
+                "Rate": 3.5,
+                "rate": 3.5,
+                "Amount": 0,
+                "amount": 0,
             },
         },
     }
     item_categories = {"R1": "Cat"}
-    write_excel(str(out), row_mapping, item_categories,
-                project_name="p", date="2026-01-01")
+    write_excel(str(out), row_mapping, item_categories, project_name="p", date="2026-01-01")
     wb = openpyxl.load_workbook(str(out), data_only=False)
     pkg = next(s for s in wb.sheetnames if s.startswith("Pkg"))
     ws = wb[pkg]

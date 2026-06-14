@@ -9,22 +9,30 @@ Senior design choices:
 - Double-click a row to open the output Excel in the system viewer.
 - Row count + last-updated timestamp in the footer.
 """
+
 from __future__ import annotations
 
 import os
 import subprocess
 import sys
-from datetime import datetime
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
-    QAbstractItemView, QSizePolicy,
-)
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from core import db
-from gui.widgets import Card, PageHeader, Section, StatusPill
+from gui.widgets import Card, PageHeader, StatusPill
 
 
 class HistoryPage(QWidget):
@@ -157,7 +165,8 @@ class HistoryPage(QWidget):
             return
         if not os.path.exists(path):
             QMessageBox.warning(
-                self, "File missing",
+                self,
+                "File missing",
                 f"Output file no longer exists:\n{path}",
             )
             return
@@ -173,6 +182,7 @@ class HistoryPage(QWidget):
 
     def delete_selected(self) -> None:
         from core import db as db_mod
+
         rows = self.table.selectionModel().selectedRows()
         if not rows:
             QMessageBox.information(self, "Nothing selected", "Pick a row first.")
@@ -181,7 +191,8 @@ class HistoryPage(QWidget):
         entry_id = int(self.table.item(row, self.COL_ID).text())
         proj = self.table.item(row, self.COL_PROJ).text()
         confirm = QMessageBox.question(
-            self, "Delete run?",
+            self,
+            "Delete run?",
             f'Remove "{proj}" (id={entry_id}) from history?\n\n'
             "The output Excel file on disk is NOT touched — only the database row is deleted.",
             QMessageBox.Yes | QMessageBox.Cancel,
@@ -194,6 +205,7 @@ class HistoryPage(QWidget):
         except AttributeError:
             # Older core.db without the helper — fall back to raw SQL.
             import sqlite3
+
             conn = sqlite3.connect(db_mod.DB_PATH)
             try:
                 conn.execute("DELETE FROM history WHERE id = ?", (entry_id,))

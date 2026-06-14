@@ -4,13 +4,13 @@ We mock httpx so no real network calls happen. The goal is to cover
 the merge logic, the curated fallback, and the per-provider URL
 routing — not to integration-test Anthropic / OpenAI / Google.
 """
+
 from __future__ import annotations
 
 import httpx
 import pytest
 
 from core import model_catalog
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -104,12 +104,14 @@ async def test_fetch_anthropic_uses_x_api_key_header(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_google_strips_models_prefix(monkeypatch):
-    fake = _FakeAsyncClient(json_body={
-        "models": [
-            {"name": "models/gemini-1.5-pro"},
-            {"name": "models/gemini-1.5-flash"},
-        ],
-    })
+    fake = _FakeAsyncClient(
+        json_body={
+            "models": [
+                {"name": "models/gemini-1.5-pro"},
+                {"name": "models/gemini-1.5-flash"},
+            ],
+        }
+    )
     _patch_async_client(monkeypatch, fake)
 
     result = await model_catalog.fetch_models("Google", api_key="goog-test")
@@ -202,6 +204,7 @@ async def test_live_list_merged_with_curated_for_unknown_saved_model(monkeypatch
     # saved value from a previous build. Make sure it survives the
     # merge even though it's no longer in the live response.
     from core.ai import PROVIDERS
+
     curated_models = PROVIDERS["OpenAI"]["models"]
     assert curated_models  # must have at least one curated entry
     preserved = curated_models[0]

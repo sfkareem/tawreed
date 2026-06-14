@@ -5,6 +5,7 @@ The wrappers translate openpyxl's noisy low-level exceptions
 ``PermissionError``, ``OSError``) into messages a quantity surveyor
 can actually act on. These tests pin down the wrapping behaviour.
 """
+
 from __future__ import annotations
 
 import os
@@ -58,8 +59,12 @@ def test_write_excel_locked_file_raises_ioerror(tmp_path, monkeypatch):
     # Construct a valid data set (one item, one category).
     output = tmp_path / "subdir" / "out.xlsx"
     row = {
-        "Nr.": "1", "Item Description": "Foo", "Unit": "m",
-        "Qty": 1, "Rate": 1, "Amount": 0,
+        "Nr.": "1",
+        "Item Description": "Foo",
+        "Unit": "m",
+        "Qty": 1,
+        "Rate": 1,
+        "Amount": 0,
     }
     # Make the parent directory read-only on POSIX; on Windows this
     # is best-effort.
@@ -87,8 +92,12 @@ def test_write_excel_valid_input_writes_file(tmp_path):
     """Smoke test: a valid input writes the file without raising."""
     output = tmp_path / "out.xlsx"
     row = {
-        "Nr.": "1", "Item Description": "Concrete",
-        "Unit": "m3", "Qty": 10, "Rate": 100, "Amount": 0,
+        "Nr.": "1",
+        "Item Description": "Concrete",
+        "Unit": "m3",
+        "Qty": 10,
+        "Rate": 100,
+        "Amount": 0,
     }
     excel.write_excel(
         str(output),

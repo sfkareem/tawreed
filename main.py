@@ -19,6 +19,7 @@ QThread worker can integrate cleanly.
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 
 import qasync
@@ -33,8 +34,39 @@ from gui.single_app import SingleApplication
 from gui import splash as splash_mod
 from gui.assets import APP_ICON_PATH
 
+log = logging.getLogger(__name__)
+
+
+def _excepthook(exc_type, exc_value, exc_tb):
+    """Catch-all for unhandled exceptions.
+
+    Routes them to the log file and, if a QApplication exists,
+    shows a modal dialog so the user knows what happened. Without
+    this, a single bad line in an async task could silently kill
+    the app under the frozen build (no console, no stderr visible).
+    """
+    log.error("Unhandled exception", exc_info=(exc_type, exc_value, exc_tb))
+    try:
+        from PySide6.QtWidgets import QMessageBox
+        app = QApplication.instance()
+        if app is not None:
+            QMessageBox.critical(
+                None,
+                "Tawreed — unexpected error",
+                f"An unhandled error occurred:\n\n{exc_value}\n\n"
+                f"Details have been saved to:\n{db.LOGS_DIR}/tawreed.log",
+            )
+    except Exception:
+        # If we can't even build the dialog (e.g. QApplication
+        # is gone, font subsystem is broken), don't make it worse.
+        log.exception("Failed to show unhandled-exception dialog")
+
 
 def _run() -> int:
+    # Install the unhandled-exception hook FIRST so any failure
+    # anywhere in the boot sequence ends up in the log.
+    sys.excepthook = _excepthook
+
     # 0. Logging — must be the very first thing, so any failure in
     # db.init_db() or single-instance handshake ends up in the log
     # file even when the GUI never starts (frozen build with
@@ -73,7 +105,14 @@ def _run() -> int:
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)
 
-    window = MainWindow()
+    try:
+        window = MainWindow()
+    except Exception:
+        # If window construction fails, release the single-instance
+        # server so a retry isn't blocked by a stale named pipe.
+        log.exception("Failed to construct MainWindow")
+        app.stop_server()
+        raise
     window.show()
     splash.finish(window)
 
@@ -83,6 +122,10 @@ def _run() -> int:
     # because is_running() returned False, but start_server is what
     # actually begins accepting new-connection attempts.
     app.start_server()
+    # Make sure the server is torn down cleanly on a normal exit
+    # (so the PID file goes away and the next launch is a fresh
+    # primary, not a stale-secondary-recovery).
+    app.aboutToQuit.connect(app.stop_server)
 
     try:
         with loop:

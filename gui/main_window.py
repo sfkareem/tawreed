@@ -26,6 +26,7 @@ from gui.pages.history_page import HistoryPage
 from gui.pages.settings_page import SettingsPage
 from gui.pages.about_page import AboutPage
 from gui.assets import LOGO_PNG_PATH
+from core.i18n import get_i18n, I18n
 
 from tawreed_app import __version__, __appname__
 
@@ -33,23 +34,36 @@ from tawreed_app import __version__, __appname__
 class MainWindow(QMainWindow):
     """Top-level shell. Holds nav + page stack; no business logic."""
 
+    # Keyed by the page id; the label is filled in by
+    # _build_nav -> retranslate_ui, so the language switch
+    # only has to call retranslate_ui(), not re-build the rail.
     NAV_ITEMS = [
-        ("workspace", "Workspace"),
-        ("history", "History"),
-        ("settings", "Settings"),
-        ("about", "About"),
+        ("workspace", "nav_workspace"),
+        ("history", "nav_history"),
+        ("settings", "nav_settings"),
+        ("about", "nav_about"),
     ]
 
     def __init__(self):
         super().__init__()
+        self._i18n: I18n = get_i18n()
         self.setWindowTitle(f"{__appname__} — AI BOQ Processing")
         self.setStyleSheet(load_stylesheet("dark"))
 
         self._nav_buttons: dict[str, QPushButton] = {}
+        self._nav_label_keys: dict[str, str] = {}  # key -> i18n key
         self._pages: dict[str, QWidget] = {}
         self._build_ui()
         # _restore_window_state also selects the correct page.
         self._restore_window_state()
+        # Initial translation. After this, the i18n signal will
+        # drive future retranslate calls.
+        self.retranslate_ui()
+        self._i18n.language_changed.connect(self._on_language_changed)
+
+    def _on_language_changed(self, _language: str) -> None:
+        """i18n slot: retranslate the shell and every page."""
+        self.retranslate_ui()
 
     # ----- UI construction ------------------------------------------------
 
@@ -107,13 +121,14 @@ class MainWindow(QMainWindow):
         # (The actual QStackedWidget is built in _build_page_stack; we just
         # create a reference to it via self._stack from the caller.)
         rail_layout.addSpacing(8)
-        for key, label in self.NAV_ITEMS:
-            btn = QPushButton(label)
+        for key, i18n_key in self.NAV_ITEMS:
+            btn = QPushButton(self._i18n.tr(i18n_key))
             btn.setObjectName("navButton")
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda _checked=False, k=key: self.select_page(k))
             self._nav_buttons[key] = btn
+            self._nav_label_keys[key] = i18n_key
             rail_layout.addWidget(btn)
 
         rail_layout.addStretch(1)
@@ -216,3 +231,30 @@ class MainWindow(QMainWindow):
                 settings.setValue("last_page", key)
                 break
         super().closeEvent(event)
+
+    # ----- i18n -----------------------------------------------------------
+
+    def retranslate_ui(self) -> None:
+        """Re-translate the shell and every registered page.
+
+        Called once during __init__ (initial render) and again
+        every time the i18n object emits ``language_changed``.
+        """
+        # Window title: just the app name (translated).
+        self.setWindowTitle(self._i18n.tr("app_title"))
+        # Nav button labels.
+        for key, i18n_key in self._nav_label_keys.items():
+            if key in self._nav_buttons:
+                self._nav_buttons[key].setText(self._i18n.tr(i18n_key))
+        # Each page can implement retranslate_ui() too. Pages that
+        # don't define it are silently skipped.
+        for page in self._pages.values():
+            retranslate = getattr(page, "retranslate_ui", None)
+            if callable(retranslate):
+                try:
+                    retranslate()
+                except Exception:
+                    # Don't let a translation failure break the
+                    # rest of the shell; the page itself can log
+                    # if it wants to.
+                    pass

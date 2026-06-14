@@ -29,6 +29,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 
 from core import db
+from core.i18n import get_i18n, I18n
 from gui.worker import BOQProcessor, WorkerSignals
 from gui.widgets import Card, PageHeader, Section, StatusPill
 
@@ -122,6 +123,7 @@ class WorkspacePage(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._i18n: I18n = get_i18n()
         self.selected_file: str | None = None
         self.signals: WorkerSignals | None = None
         self._last_output_path: str | None = None
@@ -159,13 +161,13 @@ class WorkspacePage(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(10)
-        self.browse_btn = QPushButton("Browse…")
+        self.browse_btn = QPushButton(self._i18n.tr("select_file"))
         self.browse_btn.clicked.connect(self.browse_file)
         self.clear_btn = QPushButton("Clear")
         self.clear_btn.setObjectName("ghostBtn")
         self.clear_btn.setEnabled(False)
         self.clear_btn.clicked.connect(self._clear_selection)
-        self.process_btn = QPushButton("▶  Start Processing")
+        self.process_btn = QPushButton("▶  " + self._i18n.tr("process_button"))
         self.process_btn.setObjectName("primaryBtn")
         self.process_btn.setEnabled(False)
         self.process_btn.clicked.connect(self.start_processing)
@@ -402,3 +404,18 @@ class WorkspacePage(QWidget):
         """Slot for the in-page "Show in Folder" button."""
         if self._last_output_path:
             self._reveal_in_folder(self._last_output_path)
+
+    # ----- i18n -----------------------------------------------------------
+
+    def retranslate_ui(self) -> None:
+        """Re-apply translated labels to the visible widgets.
+
+        Called by MainWindow whenever the i18n object emits
+        ``language_changed``. The status pill and the console
+        status line are intentionally left as-is here — they
+        show transient state (e.g. "Processing…", "Saved: foo.xlsx")
+        which the next event will overwrite with the translated
+        string anyway.
+        """
+        self.browse_btn.setText(self._i18n.tr("select_file"))
+        self.process_btn.setText("▶  " + self._i18n.tr("process_button"))

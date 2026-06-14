@@ -1,0 +1,51 @@
+# Dependabot — keep deps + GitHub Actions up to date.
+
+version: 2
+
+updates:
+  # Python deps from pyproject.toml. Weekly is enough for a
+  # project this size; Dependabot will batch PRs to keep the
+  # review queue manageable.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Africa/Cairo"
+    # Group all minor + patch updates into a single weekly PR
+    # so the queue stays sane. Major bumps get their own PR
+    # because they need careful review.
+    groups:
+      python-minor:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+    # Allow up to 5 open PRs from Dependabot at once. If we
+    # ever hit that limit it means nobody's reviewing, which
+    # is a separate problem.
+    open-pull-requests-limit: 5
+    # The PR body should list what changed in the lock file, not
+    # just say "Bump requests 2.31.0 to 2.32.0".
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "automated"
+
+  # GitHub Actions — actions/checkout, actions/setup-python, etc.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Africa/Cairo"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+      - "automated"
+      - "ci"

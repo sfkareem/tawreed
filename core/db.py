@@ -35,18 +35,18 @@ state from the old ``%LOCALAPPDATA%\\Tawreed`` and ``<exe-dir>/tawreed``
 locations into ``~/.tawreed`` so an existing user keeps their
 history and settings.
 """
+
 from __future__ import annotations
 
-import os
-import sys
 import json
+import os
 import shutil
 import sqlite3
+import sys
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import Any
 
-from core.ai import get_default_settings, is_valid_provider, get_provider_config
-
+from core.ai import get_default_settings, get_provider_config, is_valid_provider
 
 # ---------------------------------------------------------------------------
 # Path resolution
@@ -121,7 +121,8 @@ def _detect_legacy_locations() -> list[str]:
         candidates.append(os.path.join(exe_dir, "tawreed"))
 
     return [
-        p for p in candidates
+        p
+        for p in candidates
         if os.path.isdir(p) and os.path.normcase(p) != os.path.normcase(TAWREED_DIR)
     ]
 
@@ -192,8 +193,7 @@ def _migrate_legacy_state() -> None:
                     f"Migrated {len(migrated)} file(s) from legacy location(s)\n"
                     f"on {datetime.now().isoformat()}.\n"
                     f"New state root: {TAWREED_DIR}\n"
-                    f"Files copied:\n" +
-                    "\n".join(f"  - {p}" for p in migrated) + "\n"
+                    f"Files copied:\n" + "\n".join(f"  - {p}" for p in migrated) + "\n"
                 )
         except OSError:
             pass
@@ -260,6 +260,7 @@ def _cleanup_stray_app_state() -> None:
                         pass
             # Safe to remove.
             import shutil as _sh
+
             _sh.rmtree(legacy, ignore_errors=True)
         except Exception:
             pass
@@ -288,7 +289,7 @@ def init_db() -> None:
         conn = sqlite3.connect(DB_PATH)
         conn.execute("PRAGMA journal_mode=WAL")
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT,
@@ -296,7 +297,7 @@ def init_db() -> None:
                 packages_count INTEGER,
                 output_path TEXT
             )
-        ''')
+        """)
         conn.commit()
     finally:
         if conn:
@@ -313,24 +314,28 @@ def get_db_connection() -> sqlite3.Connection:
         raise
 
 
-def get_history() -> List[Dict[str, Any]]:
+def get_history() -> list[dict[str, Any]]:
     os.makedirs(DB_DIR, exist_ok=True)
     conn = None
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.execute("PRAGMA journal_mode=WAL")
         cursor = conn.cursor()
-        cursor.execute("SELECT id, timestamp, project_name, packages_count, output_path FROM history ORDER BY id DESC")
+        cursor.execute(
+            "SELECT id, timestamp, project_name, packages_count, output_path FROM history ORDER BY id DESC"
+        )
         rows = cursor.fetchall()
         history = []
         for r in rows:
-            history.append({
-                "id": r[0],
-                "timestamp": r[1],
-                "project_name": r[2],
-                "packages_count": r[3],
-                "output_path": r[4],
-            })
+            history.append(
+                {
+                    "id": r[0],
+                    "timestamp": r[1],
+                    "project_name": r[2],
+                    "packages_count": r[3],
+                    "output_path": r[4],
+                }
+            )
         return history
     finally:
         if conn:
@@ -367,7 +372,7 @@ def add_history(project_name: str, packages_count: int, output_path: str) -> Non
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO history (timestamp, project_name, packages_count, output_path) VALUES (?, ?, ?, ?)",
-            (timestamp, project_name, packages_count, output_path)
+            (timestamp, project_name, packages_count, output_path),
         )
         conn.commit()
     finally:
@@ -380,7 +385,7 @@ def add_history(project_name: str, packages_count: int, output_path: str) -> Non
 # ---------------------------------------------------------------------------
 
 
-def get_settings() -> Dict[str, Any]:
+def get_settings() -> dict[str, Any]:
     default_settings = get_default_settings()
     # Backwards-compat aliases: legacy code used `model_id` interchangeably
     # with `model`. Keep both keys in sync at load time.
@@ -389,7 +394,7 @@ def get_settings() -> Dict[str, Any]:
         return default_settings
     f = None
     try:
-        f = open(CONFIG_PATH, "r", encoding="utf-8")
+        f = open(CONFIG_PATH, encoding="utf-8")
         settings = json.load(f)
         if "model_id" in settings and "model" not in settings:
             settings["model"] = settings["model_id"]

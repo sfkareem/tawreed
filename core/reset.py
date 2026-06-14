@@ -15,13 +15,13 @@ user probably wants.
 This module is import-time side-effect-free. The actual disk work
 happens inside ``reset_all()``.
 """
+
 from __future__ import annotations
 
 import os
 import shutil
 import sqlite3
 from dataclasses import dataclass, field
-from typing import List
 
 from core import db
 
@@ -34,7 +34,7 @@ class ResetReport:
     history_rows_deleted: int = 0
     outputs_deleted: int = 0
     qsettings_cleared: bool = False
-    notes: List[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
     def human_summary(self) -> str:
         lines = []
@@ -126,6 +126,7 @@ def _clear_qsettings() -> bool:
     """
     try:
         from PySide6.QtCore import QSettings
+
         s = QSettings("sfkareem", "Tawreed")
         s.clear()
         s.sync()

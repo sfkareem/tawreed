@@ -11,6 +11,7 @@ Senior design choices:
   with a primary "Start Processing" button that lights up only
   when a file is selected.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -20,18 +21,24 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QTextEdit, QFileDialog, QMessageBox,
-    QSizePolicy, QFrame,
-)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from core import db
-from core.i18n import get_i18n, I18n
+from core.i18n import I18n, get_i18n
+from gui.widgets import Card, PageHeader, StatusPill
 from gui.worker import BOQProcessor, WorkerSignals
-from gui.widgets import Card, PageHeader, Section, StatusPill
 
 log = logging.getLogger(__name__)
 
@@ -176,12 +183,16 @@ class WorkspacePage(QWidget):
         self.open_output_btn = QPushButton("Open Output")
         self.open_output_btn.setObjectName("ghostBtn")
         self.open_output_btn.setEnabled(False)
-        self.open_output_btn.setToolTip("Open the most recently generated Excel in your default app")
+        self.open_output_btn.setToolTip(
+            "Open the most recently generated Excel in your default app"
+        )
         self.open_output_btn.clicked.connect(self._open_last_output)
         self.open_folder_btn = QPushButton("Show in Folder")
         self.open_folder_btn.setObjectName("ghostBtn")
         self.open_folder_btn.setEnabled(False)
-        self.open_folder_btn.setToolTip("Open the output folder in Windows Explorer with the file selected")
+        self.open_folder_btn.setToolTip(
+            "Open the output folder in Windows Explorer with the file selected"
+        )
         self.open_folder_btn.clicked.connect(self._reveal_last_output)
         actions.addWidget(self.browse_btn)
         actions.addWidget(self.clear_btn)
@@ -258,7 +269,8 @@ class WorkspacePage(QWidget):
         settings = db.get_settings()
         if not settings or not settings.get("api_key"):
             QMessageBox.warning(
-                self, "Settings Required",
+                self,
+                "Settings Required",
                 "Please configure an API key in Settings first.",
             )
             return
@@ -328,6 +340,7 @@ class WorkspacePage(QWidget):
         # reveal it in Explorer. Both are common next steps and
         # make the success state actually actionable.
         from PySide6.QtWidgets import QMessageBox
+
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Information)
         box.setWindowTitle("Complete")
@@ -361,7 +374,8 @@ class WorkspacePage(QWidget):
         """Open the generated Excel in the OS default viewer."""
         if not path or not os.path.exists(path):
             QMessageBox.warning(
-                self, "File missing",
+                self,
+                "File missing",
                 f"The output file no longer exists:\n{path}",
             )
             return
@@ -380,7 +394,8 @@ class WorkspacePage(QWidget):
         with the file selected if the OS supports it."""
         if not path or not os.path.exists(path):
             QMessageBox.warning(
-                self, "File missing",
+                self,
+                "File missing",
                 f"The output file no longer exists:\n{path}",
             )
             return

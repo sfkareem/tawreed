@@ -16,6 +16,7 @@ The launcher does four things in order:
 qasync is set up around the Qt event loop so the AI streaming
 QThread worker can integrate cleanly.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -23,17 +24,17 @@ import logging
 import sys
 
 import qasync
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from core import db
-from core.logging_setup import setup_logging
 from core.i18n import get_i18n
-from gui.main_window import MainWindow
-from gui.single_app import SingleApplication
+from core.logging_setup import setup_logging
 from gui import splash as splash_mod
 from gui.assets import APP_ICON_PATH
+from gui.main_window import MainWindow
+from gui.single_app import SingleApplication
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ def _excepthook(exc_type, exc_value, exc_tb):
     log.error("Unhandled exception", exc_info=(exc_type, exc_value, exc_tb))
     try:
         from PySide6.QtWidgets import QMessageBox
+
         app = QApplication.instance()
         if app is not None:
             QMessageBox.critical(
@@ -83,6 +85,7 @@ def _run() -> int:
     # use QStandardPaths — otherwise paths resolve to
     # %LOCALAPPDATA%\python\... instead of %LOCALAPPDATA%\sfkareem\Tawreed\...
     from tawreed_app import __appname__, __version__
+
     app.setOrganizationName("sfkareem")
     app.setApplicationName(__appname__)
     app.setApplicationVersion(__version__)
@@ -100,9 +103,7 @@ def _run() -> int:
     i18n = get_i18n()
     app.setLayoutDirection(Qt.RightToLeft if i18n.is_rtl() else Qt.LeftToRight)
     i18n.language_changed.connect(
-        lambda _lang: app.setLayoutDirection(
-            Qt.RightToLeft if i18n.is_rtl() else Qt.LeftToRight
-        )
+        lambda _lang: app.setLayoutDirection(Qt.RightToLeft if i18n.is_rtl() else Qt.LeftToRight)
     )
     if app.is_running():
         # Another instance owns the window — ask it to come forward

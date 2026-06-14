@@ -14,9 +14,9 @@ We use ``sys._MEIPASS`` (the PyInstaller bootloader sets it to the
 root. This is the standard PyInstaller pattern — see
 https://pyinstaller.org/en/stable/runtime-information.html
 """
+
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 

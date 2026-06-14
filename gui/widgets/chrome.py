@@ -9,12 +9,16 @@ Settings, and About screens look and feel like the same product.
 Design tokens (colours, radii, type) live in ``gui.styles`` and the
 ``.qss`` file; the helpers here just *arrange* widgets inside cards.
 """
+
 from __future__ import annotations
 
-from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QHBoxLayout, QLabel, QSizePolicy, QWidget,
-)
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QFrame,
+    QLabel,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class PageHeader(QWidget):

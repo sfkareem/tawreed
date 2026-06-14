@@ -11,11 +11,11 @@ because of the entries in ``tawreed.spec`` ``datas=[...]``.
 We mock ``sys._MEIPASS`` to exercise the PyInstaller branch without
 actually running a frozen build.
 """
+
 from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
@@ -24,7 +24,9 @@ import pytest
 def assets_module():
     """Reload gui.assets so the top-level path bindings are fresh."""
     import importlib
+
     import gui.assets
+
     importlib.reload(gui.assets)
     return gui.assets
 
@@ -37,12 +39,8 @@ def test_root_is_project_root_in_dev(assets_module):
 
 def test_paths_resolve_to_existing_files(assets_module):
     """Both bundled assets exist at the resolved paths (dev mode)."""
-    assert assets_module.APP_ICON_PATH.exists(), (
-        f"ICO not found: {assets_module.APP_ICON_PATH}"
-    )
-    assert assets_module.LOGO_PNG_PATH.exists(), (
-        f"PNG not found: {assets_module.LOGO_PNG_PATH}"
-    )
+    assert assets_module.APP_ICON_PATH.exists(), f"ICO not found: {assets_module.APP_ICON_PATH}"
+    assert assets_module.LOGO_PNG_PATH.exists(), f"PNG not found: {assets_module.LOGO_PNG_PATH}"
 
 
 def test_paths_use_meipass_when_frozen(assets_module, tmp_path, monkeypatch):
@@ -56,6 +54,7 @@ def test_paths_use_meipass_when_frozen(assets_module, tmp_path, monkeypatch):
     # Force the module to think it's frozen.
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
     import importlib
+
     importlib.reload(assets_module)
 
     assert assets_module.ROOT == tmp_path

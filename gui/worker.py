@@ -1,10 +1,13 @@
-import os
 import asyncio
 import logging
+import os
+
 from PySide6.QtCore import QObject, Signal
-from core.excel import parse_excel, write_excel
-from core.ai import analyze_boq_stream, test_connection as _test_connection
+
 from core import db
+from core.ai import analyze_boq_stream
+from core.ai import test_connection as _test_connection
+from core.excel import parse_excel, write_excel
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +48,7 @@ def check_connection(provider: str, api_key: str, base_url: str, model_id: str) 
                 # awkward; instead just create a one-shot loop in
                 # a new thread.
                 import concurrent.futures
+
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
                     return ex.submit(
                         asyncio.run,
@@ -53,13 +57,18 @@ def check_connection(provider: str, api_key: str, base_url: str, model_id: str) 
         except RuntimeError:
             pass
         return asyncio.run(_test_connection(provider, api_key, model_id, base_url))
-    except Exception as e:
+    except Exception:
         log.exception("Connection check failed")
         return False
 
+
 def run_analysis(
-    api_key: str, base_url: str, model_id: str,
-    system_prompt: str, user_prompt: str, signals: WorkerSignals,
+    api_key: str,
+    base_url: str,
+    model_id: str,
+    system_prompt: str,
+    user_prompt: str,
+    signals: WorkerSignals,
 ) -> dict:
     """Drive the streaming LLM call and forward tokens to the UI.
 
@@ -128,12 +137,13 @@ def run_analysis(
         }
     return parsed
 
+
 class BOQProcessor:
     def __init__(self, file_path: str, signals: WorkerSignals):
         self.file_path = file_path
         self.signals = signals
         self.settings = db.get_settings()
-        
+
     async def process(self):
         try:
             self.signals.log.emit("Parsing Excel BOQ file...")
@@ -141,16 +151,16 @@ class BOQProcessor:
                 parse_excel, self.file_path
             )
             self.signals.log.emit(f"Successfully parsed {len(data_mapping)} items from Excel.")
-            
-            api_key = self.settings.get('api_key', '')
-            model_id = self.settings.get('model_id') or self.settings.get('model', 'gpt-4.1-mini')
-            base_url = self.settings.get('base_url', 'https://api.openai.com/v1')
-            
+
+            api_key = self.settings.get("api_key", "")
+            model_id = self.settings.get("model_id") or self.settings.get("model", "gpt-4.1-mini")
+            base_url = self.settings.get("base_url", "https://api.openai.com/v1")
+
             if not api_key:
                 raise ValueError("API Key is missing. Please configure it in Settings.")
-                
+
             self.signals.log.emit(f"Sending request to AI Model ({model_id})...")
-            
+
             system_prompt = (
                 "You are an expert Quantity Surveyor and Construction Estimator.\n"
                 "Your task is to analyze the Bill of Quantities (BOQ) items provided in Markdown format, "
@@ -159,18 +169,18 @@ class BOQProcessor:
                 "DO NOT use granular item names as packages. Group related items into high-level trades.\n"
                 "You must return a JSON object with the following structure:\n"
                 "{\n"
-                "  \"project_name\": \"Name of the project or default name\",\n"
-                "  \"date\": \"YYYY-MM-DD or default current date\",\n"
-                "  \"items\": {\n"
-                "    \"R1\": \"Work Package Name\",\n"
-                "    \"R2\": \"Work Package Name\"\n"
+                '  "project_name": "Name of the project or default name",\n'
+                '  "date": "YYYY-MM-DD or default current date",\n'
+                '  "items": {\n'
+                '    "R1": "Work Package Name",\n'
+                '    "R2": "Work Package Name"\n'
                 "  }\n"
                 "}\n"
                 "Output ONLY valid JSON. Do not write anything other than the JSON object."
             )
-            
+
             user_prompt = f"Analyze and categorize these BOQ items:\n\n{markdown_content}"
-            
+
             parsed_data = await asyncio.to_thread(
                 run_analysis, api_key, base_url, model_id, system_prompt, user_prompt, self.signals
             )
@@ -186,26 +196,26 @@ class BOQProcessor:
             project_name = parsed_data.get("project_name", "Tawreed Project")
             date = parsed_data.get("date", "")
             item_categories = parsed_data.get("items", {})
-            
+
             self.signals.log.emit(f"\nAI identified project: {project_name}")
             self.signals.log.emit(f"Categorized {len(item_categories)} items into work packages.")
-            
+
             output_dir = db.get_outputs_dir()
             base_name = os.path.basename(self.file_path)
             name_without_ext, _ = os.path.splitext(base_name)
             output_file = os.path.join(output_dir, f"{name_without_ext}_Tawreed_Output.xlsx")
-            
+
             self.signals.log.emit(f"Generating output workbook: {output_file}")
-            
+
             await asyncio.to_thread(
                 write_excel, output_file, data_mapping, item_categories, project_name, date
             )
-            
+
             await asyncio.to_thread(
                 db.add_history, project_name, len(set(item_categories.values())), output_file
             )
-            
+
             self.signals.finished.emit(output_file)
-            
+
         except Exception as e:
             self.signals.error.emit(str(e))

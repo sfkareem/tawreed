@@ -4,16 +4,21 @@ We don't render Qt here — these tests just exercise the substitution
 logic so a typo in a token name shows up in CI rather than at
 runtime as a literal ``@unknown`` in the QSS string.
 """
+
 from __future__ import annotations
 
-from gui.styles import load_stylesheet, MAIN_WINDOW_STYLE, _TOKEN_MAP
+from gui.styles import _TOKEN_MAP, MAIN_WINDOW_STYLE, load_stylesheet
 
 
 def test_dark_theme_loads() -> None:
     s = load_stylesheet("dark")
     assert s, "load_stylesheet('dark') returned empty string"
     # No @-tokens should survive substitution.
-    leftover = [line for line in s.splitlines() if "@color-" in line or "@radius-" in line or "@type-" in line]
+    leftover = [
+        line
+        for line in s.splitlines()
+        if "@color-" in line or "@radius-" in line or "@type-" in line
+    ]
     assert not leftover, f"unsubstituted tokens: {leftover!r}"
 
 
@@ -27,6 +32,7 @@ def test_token_map_covers_all_referenced_tokens() -> None:
     """
     import re
     from pathlib import Path
+
     qss_path = Path(__file__).resolve().parents[1] / "gui" / "themes" / "tawreed_dark.qss"
     raw = qss_path.read_text(encoding="utf-8")
     # Drop block comments. QSS doesn't have comments but the file

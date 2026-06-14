@@ -15,11 +15,11 @@ test file:
 3. A common ``isolated_tawreed_dir`` fixture that points ``core.db``
    at a tmp_path so tests never touch the real ``~/.tawreed/``.
 """
+
 from __future__ import annotations
 
 import os
 import sys
-import sqlite3
 from pathlib import Path
 
 # 1. Qt must be set up BEFORE any PySide6 import. This is a no-op
@@ -49,6 +49,7 @@ def isolated_tawreed_dir(tmp_path, monkeypatch):
     state and copy it into the tmp dir).
     """
     import core.db as db
+
     monkeypatch.setattr(db, "TAWREED_DIR", str(tmp_path))
     monkeypatch.setattr(db, "DB_DIR", str(tmp_path / "db"))
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "db" / "tawreed.db"))

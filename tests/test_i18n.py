@@ -1,9 +1,10 @@
 """Tests for core/i18n.py."""
+
 from __future__ import annotations
 
 import pytest
 
-from core.i18n import I18n, get_i18n, detect_system_language, SUPPORTED_LANGUAGES, TRANSLATIONS
+from core.i18n import SUPPORTED_LANGUAGES, TRANSLATIONS, I18n, detect_system_language, get_i18n
 
 
 @pytest.fixture
@@ -25,9 +26,7 @@ def test_translations_have_same_keys_en_ar():
     en_keys = set(TRANSLATIONS["en"].keys())
     ar_keys = set(TRANSLATIONS["ar"].keys())
     assert en_keys == ar_keys, (
-        f"EN/AR key sets differ. "
-        f"Only in EN: {en_keys - ar_keys}. "
-        f"Only in AR: {ar_keys - en_keys}."
+        f"EN/AR key sets differ. Only in EN: {en_keys - ar_keys}. Only in AR: {ar_keys - en_keys}."
     )
 
 

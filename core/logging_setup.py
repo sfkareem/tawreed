@@ -27,6 +27,7 @@ deliberate; the four print→log.exception() conversions in
 exceptions that *would otherwise* be invisible to the user once
 ``console=False`` is set in tawreed.spec.
 """
+
 from __future__ import annotations
 
 import logging
@@ -40,8 +41,8 @@ from pathlib import Path
 DEFAULT_LOG_DIR = Path.home() / ".tawreed" / "logs"
 DEFAULT_LOG_FILE = DEFAULT_LOG_DIR / "tawreed.log"
 DEFAULT_LEVEL = "INFO"
-MAX_BYTES = 1 * 1024 * 1024   # 1 MB per file
-BACKUP_COUNT = 3               # keep tawreed.log.1, .2, .3
+MAX_BYTES = 1 * 1024 * 1024  # 1 MB per file
+BACKUP_COUNT = 3  # keep tawreed.log.1, .2, .3
 
 _CONFIGURED = False
 
@@ -99,7 +100,11 @@ def setup_logging(
         stream_handler.setLevel(level)
         root.addHandler(stream_handler)
 
-    root.info("logging initialised: file=%s level=%s frozen=%s",
-              log_file, level, getattr(sys, "frozen", False))
+    root.info(
+        "logging initialised: file=%s level=%s frozen=%s",
+        log_file,
+        level,
+        getattr(sys, "frozen", False),
+    )
     _CONFIGURED = True
     return root

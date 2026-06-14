@@ -9,6 +9,7 @@ helper logic that makes the flow correct on Windows:
 - ``_read_pid_file`` / ``_write_pid_file`` round-trip the current PID.
 - ``_clear_pid_file`` removes the file.
 """
+
 from __future__ import annotations
 
 import os

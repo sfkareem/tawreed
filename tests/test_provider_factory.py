@@ -3,19 +3,17 @@
 These are pure-Python unit tests — no GUI, no API calls, no DB writes.
 Run with `pytest tests/` from the project root.
 """
-import os
 
 import pytest
 
 # conftest.py handles the project-root sys.path insertion and the
 # Qt offscreen platform setup. See tests/conftest.py.
-
 from core.ai import (  # noqa: E402
     PROVIDERS,
-    get_provider_names,
-    get_provider_config,
-    is_valid_provider,
     get_default_settings,
+    get_provider_config,
+    get_provider_names,
+    is_valid_provider,
 )
 
 

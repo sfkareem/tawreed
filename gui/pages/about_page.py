@@ -8,19 +8,29 @@ Senior design choices:
 - Version is pulled from tawreed_app.__init__ at runtime so a version
   bump only needs to be done in one place.
 """
+
 from __future__ import annotations
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSizePolicy, QFrame,
-)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices, QPixmap
-from PySide6.QtCore import QUrl
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
-from tawreed_app import __version__, __appname__, __author__, __author_url__, __license__, __repo_url__
 from gui.assets import LOGO_PNG_PATH
-from gui.widgets import Card, PageHeader, Section, StatusPill
+from gui.widgets import Card, PageHeader
+from tawreed_app import (
+    __appname__,
+    __author__,
+    __author_url__,
+    __license__,
+    __repo_url__,
+    __version__,
+)
 
 
 class AboutPage(QWidget):
@@ -33,10 +43,12 @@ class AboutPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
 
-        layout.addWidget(PageHeader(
-            __appname__,
-            "AI-driven BOQ work-package extraction for construction quantity surveyors.",
-        ))
+        layout.addWidget(
+            PageHeader(
+                __appname__,
+                "AI-driven BOQ work-package extraction for construction quantity surveyors.",
+            )
+        )
 
         # ----- Author card -----
         author_card = Card("Author & Credits")
@@ -47,7 +59,10 @@ class AboutPage(QWidget):
         mark = QLabel()
         if LOGO_PNG_PATH.exists():
             pix = QPixmap(str(LOGO_PNG_PATH)).scaled(
-                72, 72, Qt.KeepAspectRatio, Qt.SmoothTransformation,
+                72,
+                72,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
             )
             mark.setPixmap(pix)
         else:
@@ -100,8 +115,11 @@ class AboutPage(QWidget):
         project_card.addLayout(_row("App name", __appname__))
         project_card.addLayout(_row("Version", f"v{__version__}"))
         project_card.addLayout(_row("License", __license__))
-        project_card.addLayout(_row("Repository",
-            f'<a href="{__repo_url__}" style="color:#89b4fa;">{__repo_url__}</a>'))
+        project_card.addLayout(
+            _row(
+                "Repository", f'<a href="{__repo_url__}" style="color:#89b4fa;">{__repo_url__}</a>'
+            )
+        )
         project_card.addLayout(_row("Status", "Released"))
         layout.addWidget(project_card)
 
@@ -109,7 +127,9 @@ class AboutPage(QWidget):
         stack_card = Card("Built With")
         stack_card.addLayout(_row("Language", "Python 3.10+"))
         stack_card.addLayout(_row("UI framework", "PySide6 (Qt for Python)"))
-        stack_card.addLayout(_row("LLM providers", "OpenAI · Anthropic · Google Gemini · OpenAI-compatible"))
+        stack_card.addLayout(
+            _row("LLM providers", "OpenAI · Anthropic · Google Gemini · OpenAI-compatible")
+        )
         stack_card.addLayout(_row("Data", "openpyxl · pandas · SQLite"))
         stack_card.addLayout(_row("Packaging", "PyInstaller (onedir)"))
         layout.addWidget(stack_card)
@@ -128,9 +148,7 @@ class AboutPage(QWidget):
         layout.addLayout(action_row)
 
         # ----- Footer -----
-        footer = QLabel(
-            f"© {__author__}. Released under the {__license__} License."
-        )
+        footer = QLabel(f"© {__author__}. Released under the {__license__} License.")
         footer.setObjectName("footer")
         footer.setAlignment(Qt.AlignCenter)
         layout.addWidget(footer)
